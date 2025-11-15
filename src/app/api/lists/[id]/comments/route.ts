@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getListById } from "@/lib/db";
 import {
   getCommentsForUrl,
+  getCommentsForList,
   createComment,
   updateComment,
   deleteComment,

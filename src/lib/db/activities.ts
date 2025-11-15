@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 /**
  * Create an activity log entry
@@ -15,7 +15,9 @@ export async function createActivity(
       listId,
       userId,
       action,
-      details: details ? (details as Prisma.InputJsonValue) : null,
+      details: details
+        ? (details as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
     },
     include: {
       user: {

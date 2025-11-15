@@ -142,6 +142,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
         await fetchComments();
         toast({
           title: "Comment updated",
+          description: "Changes saved successfully",
           variant: "success",
         });
         window.dispatchEvent(new CustomEvent("comment-updated"));
@@ -183,6 +184,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
         await fetchComments();
         toast({
           title: "Comment deleted",
+          description: "The comment has been removed",
           variant: "success",
         });
         window.dispatchEvent(new CustomEvent("comment-updated"));

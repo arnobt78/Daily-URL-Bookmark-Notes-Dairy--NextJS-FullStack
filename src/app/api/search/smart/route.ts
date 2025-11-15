@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "List not found" }, { status: 404 });
     }
 
-    const urls = ((list.urls as UrlItem[]) || []) as UrlItem[];
+    const urls = ((list.urls as unknown as UrlItem[]) || []) as UrlItem[];
 
     // For "find similar" feature (urlId provided, query not required)
     if (urlId) {

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resend, FROM_EMAIL } from "@/lib/email/resend";
 import {
-  getWelcomeEmail,
-  getCollaboratorInviteEmail,
-  type WelcomeEmailProps,
-  type CollaboratorInviteProps,
+  sendWelcomeEmail,
+  sendCollaboratorInviteEmail,
+} from "@/lib/email";
+import type {
+  WelcomeEmailProps,
+  CollaboratorInviteProps,
 } from "@/lib/email/templates";
 
 type EmailType = "welcome" | "collaborator-invite";
@@ -19,20 +20,19 @@ export async function POST(req: NextRequest) {
     const body: EmailRequest = await req.json();
     const { type, data } = body;
 
-    let emailContent;
-    let toEmail: string;
+    let result:
+      | Awaited<ReturnType<typeof sendWelcomeEmail>>
+      | Awaited<ReturnType<typeof sendCollaboratorInviteEmail>>;
 
     switch (type) {
       case "welcome": {
         const props = data as WelcomeEmailProps;
-        toEmail = props.userEmail;
-        emailContent = getWelcomeEmail(props);
+        result = await sendWelcomeEmail(props);
         break;
       }
       case "collaborator-invite": {
         const props = data as CollaboratorInviteProps;
-        toEmail = props.inviteeEmail;
-        emailContent = getCollaboratorInviteEmail(props);
+        result = await sendCollaboratorInviteEmail(props);
         break;
       }
       default:
@@ -42,36 +42,18 @@ export async function POST(req: NextRequest) {
         );
     }
 
-    const uniqueId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substring(2, 8)}`;
-
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
-      to: toEmail,
-      subject: emailContent.subject,
-      html: emailContent.html,
-      text: emailContent.text,
-      headers: {
-        "X-Mailer": "The Daily Urlist",
-        "X-Entity-Ref-ID": uniqueId,
-        "Message-ID": `<${uniqueId}@daily-urlist.app>`,
-      },
-      tags: [
+    if (!result.success) {
+      return NextResponse.json(
         {
-          name: "email-type",
-          value: type,
+          error: result.error || "Failed to send email",
         },
-        {
-          name: "timestamp",
-          value: Date.now().toString(),
-        },
-      ],
-    });
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      messageId: result.data?.id,
+      messageId: result.messageId,
     });
   } catch (error) {
     console.error("Error sending email:", error);

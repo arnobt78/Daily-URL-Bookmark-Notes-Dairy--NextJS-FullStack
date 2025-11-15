@@ -5,26 +5,18 @@ import { getListById } from "@/lib/db";
 import type { UrlItem } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
-export async function POST(
-  req: NextRequest,
-  {
-    params,
-  }: {
-    params:
-      | Promise<{ id: string; urlId: string }>
-      | { id: string; urlId: string };
-  }
-) {
+type RouteContext = { params: Promise<{ id: string; urlId: string }> };
+
+export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Handle both sync and async params (Next.js 15 compatibility)
-    const resolvedParams = await Promise.resolve(params);
-    const listId = resolvedParams.id;
-    const urlId = resolvedParams.urlId;
+    const params = await context.params;
+    const listId = params.id;
+    const urlId = params.urlId;
 
     // Get the list and verify ownership
     const list = await getListById(listId);
