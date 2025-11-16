@@ -189,34 +189,15 @@ export function getOptimizedMetadataImageUrl(
 
 /**
  * Get optimized URL for public folder images
- * In production, these will be served via Cloudinary
- * In development (localhost), returns original path to avoid hydration issues
+ * Public folder assets are served directly from Vercel CDN (no Cloudinary fetch needed)
+ * Cloudinary fetch is only used for external images, not same-domain public assets
  */
 export function getPublicImageUrl(
   publicPath: string,
   options: OptimizedImageOptions = {}
 ): string {
-  // Get Cloudinary config from environment (client-safe)
-  const cloudName =
-    (typeof window === "undefined"
-      ? process.env.CLOUDINARY_CLOUD_NAME
-      : window.__CLOUDINARY_CLOUD_NAME__) ||
-    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-
-  if (!cloudName || !CLOUDINARY_ENABLED) {
-    return publicPath;
-  }
-
-  // For public folder images, use direct Cloudinary fetch
-  // But only in production - localhost URLs aren't accessible from Cloudinary
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-
-  // Skip Cloudinary for localhost/development URLs - they're not publicly accessible
-  if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) {
-    return publicPath;
-  }
-
-  const fullUrl = `${baseUrl}${publicPath}`;
-  const optimizedUrl = getOptimizedImageUrl(fullUrl, options);
-  return optimizedUrl || publicPath;
+  // Public folder assets should be served directly from the same domain
+  // Cloudinary fetch is not needed (and causes 401 errors) for same-domain assets
+  // Vercel already optimizes and serves public folder assets efficiently
+  return publicPath;
 }
