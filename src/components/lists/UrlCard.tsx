@@ -279,7 +279,7 @@ export const UrlCard: React.FC<UrlCardProps> = ({
       <div className="flex flex-col sm:flex-row p-4 gap-4">
         {/* Image Section */}
         <div className="md:w-1/5 w-full flex-shrink-0 flex items-center justify-center">
-          <div className="relative h-40 w-40 md:h-52 md:w-full overflow-hidden rounded-xl shadow-sm bg-gray-900/30 backdrop-blur-sm border border-white/10 flex items-center justify-center">
+          <div className="relative w-28 h-28 md:w-full md:h-full aspect-square overflow-hidden rounded-xl shadow-sm bg-gray-900/30 backdrop-blur-sm border border-white/10 flex items-center justify-center">
             {shouldShowSkeleton ? (
               <div className="absolute inset-0 bg-gray-800/40 rounded-xl animate-pulse" />
             ) : !currentImageUrl || imageError ? (
@@ -298,7 +298,7 @@ export const UrlCard: React.FC<UrlCardProps> = ({
                   alt={title}
                   width={208}
                   height={208}
-                  className={`h-full w-full object-cover group-hover:scale-105 transition-transform duration-300 ${
+                  className={`h-full w-full object-contain group-hover:scale-105 transition-transform duration-300 ${
                     imageError ? "opacity-0" : imageLoading ? "opacity-0" : ""
                   }`}
                   unoptimized={currentImageUrl.startsWith("http")}

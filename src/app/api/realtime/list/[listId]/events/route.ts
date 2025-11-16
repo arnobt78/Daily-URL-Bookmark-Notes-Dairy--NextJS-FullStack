@@ -97,32 +97,74 @@ export async function GET(
             });
 
           // Send new messages (only if we have truly new ones)
+          // Check if controller is closed before trying to enqueue
+          if (request.signal.aborted) {
+            clearInterval(interval);
+            return;
+          }
+
           if (newMessages.length > 0) {
             console.log(`📨 [REALTIME] Sending ${newMessages.length} new message(s) to client`);
             for (const message of newMessages) {
+              // Check again before each message
+              if (request.signal.aborted) {
+                clearInterval(interval);
+                return;
+              }
               processedMessageIds.add(message.id);
               // Use a unique event ID based on timestamp
               const eventId = message.timestamp || Date.now();
-              controller.enqueue(
-                encoder.encode(
-                  `id: ${eventId}\ndata: ${JSON.stringify(message.data)}\n\n`
-                )
-              );
-              lastCheck = Date.now();
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `id: ${eventId}\ndata: ${JSON.stringify(message.data)}\n\n`
+                  )
+                );
+                lastCheck = Date.now();
+              } catch (enqueueError) {
+                // Controller might be closed, clean up and exit
+                if (enqueueError instanceof Error && enqueueError.message.includes("closed")) {
+                  clearInterval(interval);
+                  return;
+                }
+                throw enqueueError;
+              }
             }
           } else {
             // Send heartbeat to keep connection alive (but don't trigger refresh)
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`)
-            );
+            try {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`)
+              );
+            } catch (enqueueError) {
+              // Controller might be closed, clean up and exit
+              if (enqueueError instanceof Error && enqueueError.message.includes("closed")) {
+                clearInterval(interval);
+                return;
+              }
+              // Ignore heartbeat errors, connection might be closing
+            }
           }
         } catch (error) {
+          // Check if error is due to closed controller
+          if (error instanceof Error && error.message.includes("closed")) {
+            clearInterval(interval);
+            return;
+          }
           console.error("❌ [REALTIME] Error in SSE stream:", error);
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`
-            )
-          );
+          // Only try to send error message if controller is still open
+          if (!request.signal.aborted) {
+            try {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`
+                )
+              );
+            } catch {
+              // Controller closed, ignore error
+              clearInterval(interval);
+            }
+          }
         }
       }, 3000); // Poll every 3 seconds for faster real-time updates
 
