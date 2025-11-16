@@ -18,6 +18,7 @@ import {
   UserPlus,
   Mail,
   Activity,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
 import { InputDialog } from "@/components/ui/InputDialog";
@@ -33,6 +34,7 @@ export default function ListPageClient() {
   const [isToggling, setIsToggling] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
   const [isSettingUpSchedule, setIsSettingUpSchedule] = useState(false);
   const hasSyncedVectors = useRef<string | null>(null); // Track which list ID we've synced
   const hasFetchedRef = useRef<string | null>(null);
@@ -443,6 +445,77 @@ export default function ListPageClient() {
                     {isSettingUpSchedule ? "Setting up..." : "Setup Schedule"}
                   </span>
                 </button>
+                {/* Refresh Metadata Button */}
+                {list.urls && list.urls.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!list.id) return;
+                      setIsRefreshingMetadata(true);
+                      try {
+                        const response = await fetch("/api/jobs/refresh-metadata", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ listId: list.id }),
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                          // Clear React Query cache for all URLs to force re-fetch
+                          if (list.urls && list.urls.length > 0) {
+                            // Dispatch event to clear metadata cache
+                            window.dispatchEvent(
+                              new CustomEvent("metadata-refresh-complete", {
+                                detail: { listId: list.id },
+                              })
+                            );
+                          }
+
+                          // Refetch list to get updated URLs
+                          if (typeof slug === "string") {
+                            await getList(slug);
+                          }
+
+                          toast({
+                            title: "Metadata Refresh Complete! ✅",
+                            description: `Refreshed metadata for ${
+                              data.refreshed || list.urls?.length || 0
+                            } URLs using improved extractor.`,
+                            variant: "success",
+                          });
+                        } else {
+                          toast({
+                            title: "Refresh Failed",
+                            description:
+                              data.error || "Failed to refresh metadata",
+                            variant: "error",
+                          });
+                        }
+                      } catch {
+                        toast({
+                          title: "Error",
+                          description: "An unexpected error occurred",
+                          variant: "error",
+                        });
+                      } finally {
+                        setIsRefreshingMetadata(false);
+                      }
+                    }}
+                    disabled={isRefreshingMetadata}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-white/90 text-xs font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    title="Refresh metadata for all URLs with improved extractor"
+                  >
+                    <RefreshCw
+                      className={`w-4 h-4 ${
+                        isRefreshingMetadata ? "animate-spin" : ""
+                      }`}
+                    />
+                    <span>
+                      {isRefreshingMetadata ? "Refreshing..." : "Refresh Metadata"}
+                    </span>
+                  </button>
+                )}
                 {/* Health Check Button */}
                 {list.urls && list.urls.length > 0 && (
                   <button

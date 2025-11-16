@@ -66,11 +66,13 @@ export async function POST(request: NextRequest) {
 
           const metadata = await metadataResponse.json();
 
-          // Update URL with new metadata
+          // Update URL with new metadata (including images)
           const updatedUrl: UrlItem = {
             ...urlItem,
-            title: metadata.title || urlItem.title,
-            description: metadata.description || urlItem.description,
+            title: metadata.title || urlItem.title || urlItem.url,
+            description: metadata.description || urlItem.description || null,
+            // Note: image is not stored in URL item, it's fetched on-the-fly via useUrlMetadata
+            // The improved extractor will be used automatically on next render
             updatedAt: new Date().toISOString(),
           };
 

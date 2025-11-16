@@ -118,6 +118,28 @@ export function UrlList() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [newUrl, setNewUrl] = useState("");
+
+  // Listen for metadata refresh events to invalidate cache
+  useEffect(() => {
+    const handleMetadataRefresh = () => {
+      // Invalidate all metadata queries to force re-fetch with improved extractor
+      queryClient.invalidateQueries({ queryKey: ["url-metadata"] });
+      // Also clear localStorage cache for metadata
+      if (typeof window !== "undefined" && window.localStorage) {
+        const keys = Object.keys(window.localStorage);
+        keys.forEach((key) => {
+          if (key.startsWith("react-query:url-metadata:")) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
+    };
+
+    window.addEventListener("metadata-refresh-complete", handleMetadataRefresh);
+    return () => {
+      window.removeEventListener("metadata-refresh-complete", handleMetadataRefresh);
+    };
+  }, [queryClient]);
   const [error, setError] = useState<string>();
   const [editingUrl, setEditingUrl] = useState<UrlItem | null>(null);
   const [isLoading, setIsLoading] = useState(false);
