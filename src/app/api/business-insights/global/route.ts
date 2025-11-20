@@ -25,9 +25,8 @@ export async function GET(req: NextRequest) {
       return sum + urls.length;
     }, 0);
 
-    // Get active users (sessions that haven't expired and were created in last 15 minutes)
-    // Note: We use createdAt since sessions don't have updatedAt. For more accurate tracking,
-    // you could implement a heartbeat system that updates session timestamps.
+    // Get active users (sessions that haven't expired and were actively used in last 15 minutes)
+    // We use lastActivityAt which is updated on each authenticated request
     const fifteenMinutesAgo = new Date();
     fifteenMinutesAgo.setMinutes(fifteenMinutesAgo.getMinutes() - 15);
 
@@ -36,18 +35,92 @@ export async function GET(req: NextRequest) {
         expiresAt: {
           gte: new Date(), // Session hasn't expired
         },
-        createdAt: {
-          gte: fifteenMinutesAgo, // Session was created in last 15 minutes
+        lastActivityAt: {
+          gte: fifteenMinutesAgo, // User made an authenticated request in last 15 minutes
         },
       },
-      select: {
-        userId: true,
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        lastActivityAt: "desc",
       },
     });
+    
+    // Filter out sessions that are likely migration artifacts
+    // Sessions where lastActivityAt equals createdAt (within 2 minutes) were likely set by migration
+    // and haven't been truly used since. Only count sessions that show actual activity.
+    const trulyActiveSessions = activeSessions.filter((session) => {
+      const createdAt = new Date((session as any).createdAt).getTime();
+      const lastActivityAt = new Date(session.lastActivityAt).getTime();
+      const timeDiff = lastActivityAt - createdAt;
+      
+      // Migration timestamp: approximately when migration ran (2025-11-20 ~13:43)
+      const migrationTimestamp = new Date("2025-11-20T13:43:00.000Z").getTime();
+      const isPreMigration = createdAt < migrationTimestamp;
+      
+      // Keep session if:
+      // 1. Created recently (within last 24 hours) - definitely active
+      // 2. OR lastActivityAt is at least 2 minutes after createdAt - shows actual usage
+      // 3. OR session was created after migration (has proper lastActivityAt tracking from start)
+      if (Date.now() - createdAt < 24 * 60 * 60 * 1000) {
+        // Created within last 24 hours - definitely active
+        return true;
+      }
+      
+      if (timeDiff > 120000) {
+        // lastActivityAt is at least 2 minutes after createdAt - shows actual activity
+        return true;
+      }
+      
+      // For pre-migration sessions, if lastActivityAt is very close to createdAt (within 2 min),
+      // it's likely a migration artifact and hasn't been truly used recently
+      // Skip these unless they were created after migration
+      return !isPreMigration;
+    });
 
-    // Get unique user IDs
-    const uniqueUserIds = new Set(activeSessions.map((s) => s.userId));
+    // Get unique user IDs with debug info (using filtered sessions)
+    const uniqueUserIds = new Set(trulyActiveSessions.map((s) => s.userId));
     const liveUsersNow = uniqueUserIds.size;
+
+    // Debug logging (only in development)
+    if (process.env.NODE_ENV === "development") {
+      const now = new Date();
+      console.log("🔍 [LIVE USERS] Active sessions:", {
+        totalSessionsFound: activeSessions.length,
+        trulyActiveSessions: trulyActiveSessions.length,
+        uniqueUsers: liveUsersNow,
+        timeWindow: "15 minutes",
+        cutoffTime: fifteenMinutesAgo.toISOString(),
+        sessions: trulyActiveSessions.map((s) => {
+          const createdAt = new Date((s as any).createdAt).getTime();
+          const lastActivityAt = new Date(s.lastActivityAt).getTime();
+          const timeDiff = lastActivityAt - createdAt;
+          return {
+            userId: s.userId,
+            email: s.user?.email,
+            lastActivityAt: s.lastActivityAt,
+            createdAt: (s as any).createdAt,
+            expiresAt: (s as any).expiresAt,
+            minutesAgo: Math.round(
+              (now.getTime() - lastActivityAt) / 60000
+            ),
+            sessionAgeInDays: Math.round(
+              (now.getTime() - createdAt) / (1000 * 60 * 60 * 24)
+            ),
+            timeSinceCreation: Math.round(timeDiff / 60000) + " minutes",
+            isRecentlyCreated:
+              Date.now() - createdAt < 24 * 60 * 60 * 1000 ? "Yes" : "No",
+          };
+        }),
+        filteredOut: activeSessions.length - trulyActiveSessions.length,
+      });
+    }
 
     // Calculate public vs private lists
     const publicLists = allLists.filter((list) => list.isPublic).length;

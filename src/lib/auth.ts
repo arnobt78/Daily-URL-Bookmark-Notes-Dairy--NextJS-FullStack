@@ -37,7 +37,112 @@ function generateToken(): string {
 }
 
 /**
+ * Clean up expired sessions (fire-and-forget, non-blocking)
+ */
+async function cleanupExpiredSessions(): Promise<void> {
+  try {
+    await prisma.session.deleteMany({
+      where: {
+        expiresAt: {
+          lt: new Date(), // Sessions that have expired
+        },
+      },
+    });
+  } catch (error) {
+    // Silently fail - cleanup is not critical
+    console.error("Failed to cleanup expired sessions:", error);
+  }
+}
+
+/**
+ * Clean up old sessions for a user, keeping only the most recent active ones
+ * This prevents session accumulation when users log in multiple times
+ * 
+ * Strategy:
+ * - Keep only 3 most recent active sessions (lastActivityAt within last 7 days)
+ * - Delete all other sessions for the user (expired or old)
+ */
+async function cleanupOldSessionsForUser(
+  userId: string,
+  keepCount: number = 3
+): Promise<void> {
+  try {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    // Get all non-expired sessions for this user, ordered by lastActivityAt (most recent first)
+    const allSessions = await prisma.session.findMany({
+      where: {
+        userId,
+        expiresAt: {
+          gte: now, // Only non-expired sessions
+        },
+      },
+      orderBy: {
+        lastActivityAt: "desc",
+      },
+      select: {
+        id: true,
+        lastActivityAt: true,
+      },
+    });
+
+    // Separate into recent active sessions (used in last 7 days) and old sessions
+    const recentActiveSessions = allSessions.filter(
+      (s) => new Date(s.lastActivityAt) >= sevenDaysAgo
+    );
+    
+    // Keep only the most recent active sessions
+    const sessionsToKeep = recentActiveSessions.slice(0, keepCount);
+    const sessionIdsToKeep = new Set(sessionsToKeep.map((s) => s.id));
+    
+    // Delete all other sessions for this user (expired, old, or beyond keepCount)
+    const sessionsToDelete = allSessions
+      .filter((s) => !sessionIdsToKeep.has(s.id))
+      .map((s) => s.id);
+    
+    // Also delete expired sessions
+    const expiredSessions = await prisma.session.findMany({
+      where: {
+        userId,
+        expiresAt: {
+          lt: now, // Expired sessions
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+    
+    const allSessionsToDelete = [
+      ...sessionsToDelete,
+      ...expiredSessions.map((s) => s.id),
+    ];
+    
+    if (allSessionsToDelete.length > 0) {
+      await prisma.session.deleteMany({
+        where: {
+          id: {
+            in: allSessionsToDelete,
+          },
+        },
+      });
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `🧹 [SESSION CLEANUP] Deleted ${allSessionsToDelete.length} old sessions for user ${userId}`
+        );
+      }
+    }
+  } catch (error) {
+    // Silently fail - cleanup is not critical
+    console.error("Failed to cleanup old sessions for user:", error);
+  }
+}
+
+/**
  * Create a session for a user
+ * This also aggressively cleans up old sessions for the user to prevent accumulation
  */
 export async function createSession(userId: string): Promise<string> {
   const token = generateToken();
@@ -50,6 +155,22 @@ export async function createSession(userId: string): Promise<string> {
       expiresAt,
     },
   });
+
+  // Aggressively cleanup old sessions for this user BEFORE creating new one (fire-and-forget)
+  // This ensures we don't accumulate sessions when users log in multiple times
+  // Keep only 3 most recent active sessions (used in last 7 days)
+  cleanupOldSessionsForUser(userId, 3).catch(() => {
+    // Ignore errors
+  });
+
+  // Cleanup expired sessions globally (fire-and-forget, less frequent)
+  // Only run cleanup occasionally to avoid overhead
+  if (Math.random() < 0.1) {
+    // 10% chance to run global cleanup (reduces overhead)
+    cleanupExpiredSessions().catch(() => {
+      // Ignore errors
+    });
+  }
 
   return token;
 }
@@ -89,6 +210,18 @@ export async function getCurrentSession(): Promise<Session | null> {
     sessionCache = { token, session: null, timestamp: now };
     return null;
   }
+
+  // Update lastActivityAt to track active users (don't await to avoid blocking)
+  // This is fire-and-forget to not slow down the request
+  prisma.session
+    .update({
+      where: { token },
+      data: { lastActivityAt: new Date() },
+    })
+    .catch((err) => {
+      // Silently fail - not critical if update fails
+      console.error("Failed to update session lastActivityAt:", err);
+    });
 
   // Cache the result
   sessionCache = { token, session, timestamp: now };
@@ -175,12 +308,145 @@ export async function signIn(
 }
 
 /**
- * Sign out the current user
+ * Delete all sessions for a user (useful for logout from all devices)
  */
-export async function signOut(): Promise<void> {
+export async function deleteAllUserSessions(userId: string): Promise<void> {
+  await prisma.session.deleteMany({
+    where: { userId },
+  });
+}
+
+/**
+ * Sign out the current user
+ * @param deleteAllDevices - If true, deletes all sessions for this user (logout from all devices)
+ */
+export async function signOut(deleteAllDevices: boolean = false): Promise<void> {
   const session = await getCurrentSession();
-  if (session) {
+  if (!session) return;
+
+  if (deleteAllDevices) {
+    // Delete ALL sessions for this user (logout from all devices)
+    await deleteAllUserSessions(session.userId);
+  } else {
+    // Only delete the current session
     await deleteSession(session.token);
+    // Also clean up old sessions for this user (but keep a few most recent)
+    // This prevents accumulation when users log in/out frequently
+    cleanupOldSessionsForUser(session.userId, 2).catch(() => {
+      // Ignore errors
+    });
+  }
+}
+
+/**
+ * Global cleanup function to remove expired sessions and old inactive sessions
+ * This can be called periodically (e.g., on startup, via cron job, or scheduled task)
+ * 
+ * Strategy:
+ * - Delete all expired sessions
+ * - For each user, keep only their 3 most recent active sessions (used in last 7 days)
+ * - Delete all other old sessions
+ */
+export async function globalSessionCleanup(): Promise<{
+  expiredDeleted: number;
+  oldDeleted: number;
+  totalDeleted: number;
+}> {
+  try {
+    const now = new Date();
+    let expiredDeleted = 0;
+    let oldDeleted = 0;
+
+    // 1. Delete all expired sessions
+    const expiredResult = await prisma.session.deleteMany({
+      where: {
+        expiresAt: {
+          lt: now,
+        },
+      },
+    });
+    expiredDeleted = expiredResult.count;
+
+    // 2. Clean up old sessions for each user
+    // Get all unique users with active sessions
+    const activeSessions = await prisma.session.findMany({
+      where: {
+        expiresAt: {
+          gte: now,
+        },
+      },
+      select: {
+        userId: true,
+        id: true,
+        lastActivityAt: true,
+      },
+    });
+
+    // Group sessions by user
+    const sessionsByUser = new Map<string, typeof activeSessions>();
+    activeSessions.forEach((session) => {
+      if (!sessionsByUser.has(session.userId)) {
+        sessionsByUser.set(session.userId, []);
+      }
+      sessionsByUser.get(session.userId)!.push(session);
+    });
+
+    // Clean up old sessions for each user
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    for (const [userId, sessions] of sessionsByUser.entries()) {
+      // Sort by lastActivityAt (most recent first)
+      sessions.sort(
+        (a, b) =>
+          new Date(b.lastActivityAt).getTime() -
+          new Date(a.lastActivityAt).getTime()
+      );
+
+      // Keep only 3 most recent active sessions (used in last 7 days)
+      const recentActive = sessions.filter(
+        (s) => new Date(s.lastActivityAt) >= sevenDaysAgo
+      );
+      const toKeep = recentActive.slice(0, 3);
+      const keepIds = new Set(toKeep.map((s) => s.id));
+
+      // Delete old sessions
+      const toDelete = sessions
+        .filter((s) => !keepIds.has(s.id))
+        .map((s) => s.id);
+
+      if (toDelete.length > 0) {
+        const deleted = await prisma.session.deleteMany({
+          where: {
+            id: {
+              in: toDelete,
+            },
+          },
+        });
+        oldDeleted += deleted.count;
+      }
+    }
+
+    const totalDeleted = expiredDeleted + oldDeleted;
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("🧹 [GLOBAL CLEANUP] Session cleanup completed:", {
+        expiredDeleted,
+        oldDeleted,
+        totalDeleted,
+      });
+    }
+
+    return {
+      expiredDeleted,
+      oldDeleted,
+      totalDeleted,
+    };
+  } catch (error) {
+    console.error("Failed to run global session cleanup:", error);
+    return {
+      expiredDeleted: 0,
+      oldDeleted: 0,
+      totalDeleted: 0,
+    };
   }
 }
 
