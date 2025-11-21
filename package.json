@@ -22,7 +22,7 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.2.0",
     "@nanostores/react": "^1.0.0",
-    "@prisma/client": "^6.18.0",
+    "@prisma/client": "^6.19.0",
     "@tanstack/react-query": "^5.90.6",
     "@types/nodemailer": "^7.0.3",
     "@upstash/qstash": "^2.8.4",
@@ -38,7 +38,7 @@
     "next": "^15.5.6",
     "next-auth": "^4.24.13",
     "nodemailer": "^7.0.10",
-    "prisma": "^6.18.0",
+    "prisma": "^6.19.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.3.0",
@@ -71,5 +71,8 @@
     "ts-jest": "^29.4.5",
     "typescript": "^5.7.3",
     "vitest": "^4.0.10"
+  },
+  "overrides": {
+    "glob": "^10.0.0"
   }
 }
