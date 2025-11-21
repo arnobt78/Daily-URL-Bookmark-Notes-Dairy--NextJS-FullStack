@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LinkIcon,
   ArrowRightStartOnRectangleIcon,
@@ -11,11 +12,63 @@ import { IconButton } from "@/components/ui/HoverTooltip";
 
 export default function Navbar() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const router = useRouter();
   const { displayText, isComplete } = useTypewriter({
     text: "Daily Urlist",
     speed: 200,
     delay: 2500,
   });
+
+  // Handle navigation with import check
+  const handleNavigation = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    // Check if import is active or just completed
+    if (typeof window !== "undefined") {
+      const isImportActive = (window as any).__bulkImportActive === true;
+      const importJustCompleted = (window as any).__bulkImportJustCompleted === true;
+      
+      if (isImportActive || importJustCompleted) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (process.env.NODE_ENV === "development") {
+          console.log(`⏸️ [NAVBAR] Navigation blocked - import active: ${isImportActive}, just completed: ${importJustCompleted}`);
+        }
+        
+        // CRITICAL: Force abort any pending requests before navigation
+        // This ensures RSC requests don't get stuck
+        try {
+          const { abortRegistry } = require("@/utils/abortRegistry");
+          if (abortRegistry) {
+            abortRegistry.forceAbortAllGlobal();
+          }
+          
+          // Clear router cache before navigation
+          const nextRouter = (window as any).__NEXT_DATA__?.router;
+          if (nextRouter?.prefetchCache) {
+            nextRouter.prefetchCache.clear();
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+        
+        // Wait a bit and retry with forced navigation
+        setTimeout(() => {
+          if (!(window as any).__bulkImportActive) {
+            // Use window.location for forced navigation to avoid RSC issues
+            // This ensures a clean navigation without stuck prefetch requests
+            window.location.href = href;
+          } else {
+            // If still active after wait, force navigation anyway
+            window.location.href = href;
+          }
+        }, 200);
+        
+        return;
+      }
+    }
+    
+    // Normal navigation - let Next.js handle it
+  };
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -47,6 +100,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between">
           <Link
             href="/"
+            onClick={(e) => handleNavigation(e, "/")}
             className="flex items-center gap-3 text-xl font-bold text-white hover:text-blue-400 transition-all duration-300 font-mono group"
           >
             <div className="bg-transparent transition-transform duration-300 group-hover:scale-110">

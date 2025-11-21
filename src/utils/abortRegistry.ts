@@ -6,6 +6,9 @@
 class AbortRegistry {
   private controllers: Set<AbortController> = new Set();
   private fetchMap: WeakMap<AbortController, Set<Promise<any>>> = new WeakMap();
+  private globalFetchControllers: Map<string, AbortController> = new Map();
+  private isIntercepting: boolean = false;
+  private originalFetch: typeof fetch | null = null;
 
   /**
    * Register an AbortController to track
@@ -37,21 +40,138 @@ class AbortRegistry {
   }
 
   /**
-   * Abort all registered controllers
-   * CRITICAL: This prevents navigation from getting stuck
+   * Start intercepting ALL fetch calls globally (including Next.js internal RSC requests)
+   * CRITICAL: This allows us to abort even Next.js router requests
+   */
+  startGlobalInterception(): void {
+    if (typeof window === "undefined" || this.isIntercepting) {
+      return;
+    }
+
+    // Store original fetch
+    this.originalFetch = window.fetch;
+
+    // Intercept fetch to track ALL requests (including Next.js RSC)
+    const self = this;
+    window.fetch = function (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> {
+      // CRITICAL: Intercept ALL requests when interception is active
+      // This includes requests that happen during cleanup or just after import
+      // We'll abort them if needed in abortAll()
+
+      // Create a controller for this fetch
+      const controller = new AbortController();
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+          ? input.href
+          : input instanceof Request
+          ? input.url
+          : String(input);
+      const requestId = `${url}_${Date.now()}_${Math.random()}`;
+
+      // Track this controller
+      self.globalFetchControllers.set(requestId, controller);
+
+      // Merge abort signals if provided
+      const existingSignal = init?.signal;
+      let finalSignal: AbortSignal;
+
+      if (existingSignal) {
+        // If both signals abort, abort the controller
+        if (existingSignal.aborted) {
+          controller.abort();
+          finalSignal = controller.signal;
+        } else {
+          existingSignal.addEventListener("abort", () => {
+            if (!controller.signal.aborted) {
+              controller.abort();
+            }
+          });
+          finalSignal = controller.signal;
+        }
+      } else {
+        finalSignal = controller.signal;
+      }
+
+      // Call original fetch with abort signal
+      const fetchPromise = self
+        .originalFetch!.call(window, input, {
+          ...init,
+          signal: finalSignal,
+        })
+        .finally(() => {
+          // Clean up after fetch completes
+          self.globalFetchControllers.delete(requestId);
+        });
+
+      return fetchPromise;
+    };
+
+    this.isIntercepting = true;
+
+    if (process.env.NODE_ENV === "development") {
+      console.debug(`🔍 [ABORT_REGISTRY] Started global fetch interception`);
+    }
+  }
+
+  /**
+   * Stop intercepting fetch calls
+   */
+  stopGlobalInterception(): void {
+    if (
+      typeof window === "undefined" ||
+      !this.isIntercepting ||
+      !this.originalFetch
+    ) {
+      return;
+    }
+
+    // Restore original fetch
+    window.fetch = this.originalFetch;
+    this.originalFetch = null;
+    this.isIntercepting = false;
+
+    if (process.env.NODE_ENV === "development") {
+      console.debug(`🔍 [ABORT_REGISTRY] Stopped global fetch interception`);
+    }
+  }
+
+  /**
+   * Abort all registered controllers AND all intercepted global fetch requests
+   * CRITICAL: This prevents navigation from getting stuck, including Next.js RSC requests
    */
   abortAll(): void {
-    const count = this.controllers.size;
-    if (process.env.NODE_ENV === "development" && count > 0) {
+    const registeredCount = this.controllers.size;
+    const interceptedCount = this.globalFetchControllers.size;
+    const totalCount = registeredCount + interceptedCount;
+
+    if (process.env.NODE_ENV === "development" && totalCount > 0) {
       console.debug(
-        `🛑 [ABORT_REGISTRY] Aborting ${count} active request(s) to allow navigation`
+        `🛑 [ABORT_REGISTRY] Aborting ${totalCount} active request(s) (${registeredCount} registered, ${interceptedCount} intercepted) to allow navigation`
       );
     }
 
-    // Create a copy to avoid iteration issues during abort
+    // Abort all registered controllers
     const controllersToAbort = Array.from(this.controllers);
-
     controllersToAbort.forEach((controller) => {
+      try {
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+      } catch (error) {
+        // Ignore errors - controller might already be aborted
+      }
+    });
+
+    // Abort all intercepted global fetch requests
+    const globalControllersToAbort = Array.from(
+      this.globalFetchControllers.values()
+    );
+    globalControllersToAbort.forEach((controller) => {
       try {
         if (!controller.signal.aborted) {
           controller.abort();
@@ -63,13 +183,80 @@ class AbortRegistry {
 
     // Clear all controllers after aborting
     this.controllers.clear();
+    this.globalFetchControllers.clear();
   }
 
   /**
-   * Get count of active controllers
+   * Get count of active controllers (both registered and intercepted)
    */
   getCount(): number {
-    return this.controllers.size;
+    return this.controllers.size + this.globalFetchControllers.size;
+  }
+
+  /**
+   * Force abort ALL pending fetch requests globally (nuclear option)
+   * This includes requests that might not be registered or intercepted
+   * CRITICAL: Use this as a last resort when navigation is completely stuck
+   */
+  forceAbortAllGlobal(): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    // First, abort all registered and intercepted requests
+    this.abortAll();
+
+    // Then, try to abort any other pending requests via browser APIs
+    // This is a workaround for requests we might have missed
+    try {
+      // Force clear all Next.js router caches
+      const nextRouter = (window as any).__NEXT_DATA__?.router;
+      if (nextRouter?.prefetchCache) {
+        nextRouter.prefetchCache.clear();
+      }
+
+      const routerInstance = (window as any).__nextRouter;
+      if (routerInstance) {
+        if (routerInstance.isPending !== undefined) {
+          routerInstance.isPending = false;
+        }
+        if (routerInstance.cache) {
+          routerInstance.cache.clear?.();
+        }
+        // Try to abort any pending navigation
+        if (
+          routerInstance.pending &&
+          routerInstance.pending instanceof AbortController
+        ) {
+          routerInstance.pending.abort();
+        }
+      }
+
+      const nextFetchCache = (window as any).__nextFetchCache;
+      if (nextFetchCache) {
+        nextFetchCache.clear();
+      }
+
+      // Try to access Next.js router's promise queue and abort pending requests
+      const routerInternals = (window as any).__nextRouterInternals;
+      if (routerInternals?.promiseQueue) {
+        // Clear promise queue
+        if (typeof routerInternals.promiseQueue.clear === "function") {
+          routerInternals.promiseQueue.clear();
+        }
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug(
+          `🛑 [ABORT_REGISTRY] Force aborted ALL global requests including Next.js internal`
+        );
+      }
+    } catch (e) {
+      // Ignore errors - internal APIs might not exist
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`⚠️ [ABORT_REGISTRY] Error in force abort:`, e);
+      }
+    }
   }
 }
 

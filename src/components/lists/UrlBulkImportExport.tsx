@@ -649,6 +649,15 @@ export function UrlBulkImportExport({
         );
       }
 
+      // CRITICAL: Start intercepting ALL fetch calls globally (including Next.js RSC requests)
+      // This allows us to abort even Next.js router internal requests
+      if (typeof window !== "undefined" && abortRegistry) {
+        abortRegistry.startGlobalInterception();
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🔍 [IMPORT] Started global fetch interception for RSC request tracking`);
+        }
+      }
+
       // Notify parent that bulk operation is starting
       if (onBulkOperationStart) {
         onBulkOperationStart();
@@ -677,6 +686,23 @@ export function UrlBulkImportExport({
       // Sequential processing (1 at a time) would be too slow for large imports
       const CONCURRENCY_LIMIT = 2;
       let successCount = 0;
+      
+      // CRITICAL: Track import timing and metrics for debugging
+      const importStartTime = Date.now();
+      const importMetrics = {
+        startTime: importStartTime,
+        urlTimings: [] as Array<{ url: string; startTime: number; endTime?: number; duration?: number; status: 'success' | 'failed' | 'pending' }>,
+        totalUrls: validUrls.length,
+        concurrencyLimit: CONCURRENCY_LIMIT,
+      };
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🕐 [IMPORT] Import metrics initialized:`, {
+          totalUrls: importMetrics.totalUrls,
+          concurrencyLimit: importMetrics.concurrencyLimit,
+          startTime: new Date(importStartTime).toISOString(),
+        });
+      }
       let errorCount = 0;
       let skippedCount = 0; // URLs that failed validation
       const metadataFailedUrls: string[] = []; // Track URLs that couldn't fetch metadata
@@ -962,36 +988,68 @@ export function UrlBulkImportExport({
         const currentIndex = nextUrlIndex;
         nextUrlIndex++;
 
+        const urlStartTime = Date.now();
+        promiseStartTimes.set(currentIndex, urlStartTime);
+        
+        // Track URL in metrics
+        importMetrics.urlTimings.push({
+          url: urlItem.url,
+          startTime: urlStartTime,
+          status: 'pending',
+        });
+        
         if (process.env.NODE_ENV === "development") {
+          const elapsed = Math.round((urlStartTime - importStartTime) / 1000);
           console.log(
-            `📥 [IMPORT] startNextUrl: Starting URL ${currentIndex + 1}/${
+            `📥 [IMPORT] [${elapsed}s] Starting URL ${currentIndex + 1}/${
               validUrls.length
             }: ${urlItem.url.substring(0, 60)}...`
           );
         }
 
-        const startTime = Date.now();
-        promiseStartTimes.set(currentIndex, startTime);
-
         const promise = processUrl(urlItem)
           .then(() => {
+            const urlEndTime = Date.now();
+            const urlDuration = urlEndTime - urlStartTime;
             completedCount++;
+            
+            // Update metrics
+            const urlMetric = importMetrics.urlTimings.find(m => m.url === urlItem.url && m.status === 'pending');
+            if (urlMetric) {
+              urlMetric.endTime = urlEndTime;
+              urlMetric.duration = urlDuration;
+              urlMetric.status = 'success';
+            }
+            
             if (process.env.NODE_ENV === "development") {
+              const elapsed = Math.round((urlEndTime - importStartTime) / 1000);
               console.log(
-                `✅ [IMPORT] URL ${currentIndex + 1}/${
+                `✅ [IMPORT] [${elapsed}s] URL ${currentIndex + 1}/${
                   validUrls.length
-                } completed (${completedCount}/${validUrls.length} total)`
+                } completed in ${Math.round(urlDuration / 1000)}s (${completedCount}/${validUrls.length} total, ${successCount} success, ${errorCount} failed)`
               );
             }
           })
           .catch((error) => {
+            const urlEndTime = Date.now();
+            const urlDuration = urlEndTime - urlStartTime;
             completedCount++;
+            
+            // Update metrics
+            const urlMetric = importMetrics.urlTimings.find(m => m.url === urlItem.url && m.status === 'pending');
+            if (urlMetric) {
+              urlMetric.endTime = urlEndTime;
+              urlMetric.duration = urlDuration;
+              urlMetric.status = 'failed';
+            }
+            
             if (process.env.NODE_ENV === "development") {
+              const elapsed = Math.round((urlEndTime - importStartTime) / 1000);
               console.error(
-                `❌ [IMPORT] URL ${currentIndex + 1}/${
+                `❌ [IMPORT] [${elapsed}s] URL ${currentIndex + 1}/${
                   validUrls.length
-                } failed:`,
-                error
+                } failed after ${Math.round(urlDuration / 1000)}s:`,
+                error instanceof Error ? error.message : String(error)
               );
             }
           })
@@ -1190,22 +1248,36 @@ export function UrlBulkImportExport({
         isImportActiveRef.current &&
         !signalForWait?.aborted
       ) {
-        try {
-          // Wait max 10 seconds for remaining promises, then force abort
-          const finalWaitTimeout = new Promise<void>((resolve) => {
-            setTimeout(() => {
-              if (process.env.NODE_ENV === "development") {
-                console.warn(
-                  `⚠️ [IMPORT] Final wait timeout - aborting remaining ${runningPromises.size} request(s)`
-                );
-              }
-              // Abort all pending requests
-              if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
-              }
-              resolve();
-            }, 10000); // 10 second timeout for final wait
+        // Declare finalWaitStartTime outside try block so it's accessible in catch
+        const finalWaitStartTime = Date.now();
+        
+        if (process.env.NODE_ENV === "development") {
+          console.log(`⏳ [IMPORT] Starting final wait for ${runningPromises.size} remaining promise(s)...`, {
+            promiseIndices: Array.from(runningPromises.keys()),
           });
+        }
+        
+        try {
+            // Wait max 10 seconds for remaining promises, then force abort
+            const finalWaitTimeout = new Promise<void>((resolve) => {
+              setTimeout(() => {
+                const waitDuration = Date.now() - finalWaitStartTime;
+                if (process.env.NODE_ENV === "development") {
+                  console.warn(
+                    `⚠️ [IMPORT] Final wait timeout after ${Math.round(waitDuration / 1000)}s - aborting remaining ${runningPromises.size} request(s)`,
+                    {
+                      pendingIndices: Array.from(runningPromises.keys()),
+                      abortRegistryCount: abortRegistry?.getCount() || 0,
+                    }
+                  );
+                }
+                // Abort all pending requests
+                if (abortControllerRef.current) {
+                  abortControllerRef.current.abort();
+                }
+                resolve();
+              }, 10000); // 10 second timeout for final wait
+            });
 
           const results = await Promise.race([
             Promise.allSettled(Array.from(runningPromises.values())),
@@ -1219,34 +1291,82 @@ export function UrlBulkImportExport({
             if (result.status === "rejected") {
               if (process.env.NODE_ENV === "development") {
                 console.warn(
-                  `URL processing promise was rejected (final wait):`,
+                  `⚠️ [IMPORT] URL processing promise was rejected (final wait):`,
                   result.reason
                 );
               }
               errorCount++;
             }
           });
-        } catch (error) {
+          
           if (process.env.NODE_ENV === "development") {
-            console.error("Error in final wait for URL processing:", error);
+            const finalWaitDuration = Date.now() - finalWaitStartTime;
+            console.log(`✅ [IMPORT] Final wait completed in ${Math.round(finalWaitDuration / 1000)}s`, {
+              remainingPromises: runningPromises.size,
+              abortRegistryCount: abortRegistry?.getCount() || 0,
+            });
+          }
+        } catch (error) {
+          const finalWaitDuration = Date.now() - finalWaitStartTime;
+          if (process.env.NODE_ENV === "development") {
+            console.error(`❌ [IMPORT] Error in final wait after ${Math.round(finalWaitDuration / 1000)}s:`, error);
           }
         }
+      } else if (process.env.NODE_ENV === "development" && runningPromises.size > 0) {
+        console.log(`⏭️ [IMPORT] Skipping final wait - import inactive or aborted`, {
+          pendingPromises: runningPromises.size,
+          isImportActive: isImportActiveRef.current,
+          isAborted: signalForWait?.aborted || false,
+        });
+      }
+
+      const processingEndTime = Date.now();
+      const processingDuration = processingEndTime - importStartTime;
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log(`⏱️ [IMPORT] Processing loop completed in ${Math.round(processingDuration / 1000)}s`, {
+          totalUrls: validUrls.length,
+          processed: processedCount,
+          success: successCount,
+          failed: errorCount,
+          pending: runningPromises.size,
+          elapsed: Math.round(processingDuration / 1000) + 's',
+        });
       }
 
       // CRITICAL: Abort all pending requests before clearing controller
       // This ensures all in-flight fetch requests are cancelled
+      const cleanupStartTime = Date.now();
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🧹 [IMPORT] Starting cleanup phase...`, {
+          pendingPromises: runningPromises.size,
+          abortRegistryCount: abortRegistry?.getCount() || 0,
+        });
+      }
+      
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🛑 [IMPORT] Aborted import controller`);
+        }
       }
 
       // Cancel all pending getList requests that might be stuck
       // These are likely GET requests to /api/lists/test-import that are pending
       cancelPendingGetList();
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🛑 [IMPORT] Cancelled pending getList requests`);
+      }
 
       // Give a longer delay to ensure all cancellations are processed
       // This prevents the page from getting stuck with pending requests
       // and allows RSC (React Server Components) requests to be cancelled too
       await new Promise((resolve) => setTimeout(resolve, 500));
+      
+      if (process.env.NODE_ENV === "development") {
+        const cleanupDuration = Date.now() - cleanupStartTime;
+        console.log(`🧹 [IMPORT] Initial cleanup completed in ${Math.round(cleanupDuration)}ms`);
+      }
 
       // Reset file input
       if (fileInputRef.current) {
@@ -1256,14 +1376,40 @@ export function UrlBulkImportExport({
       // Clear abort controller AFTER aborting (to ensure cleanup)
       abortControllerRef.current = null;
 
+      const summaryTime = Date.now();
+      const totalDuration = summaryTime - importStartTime;
+      
+      // Calculate average times
+      const successfulUrls = importMetrics.urlTimings.filter(m => m.status === 'success');
+      const failedUrls = importMetrics.urlTimings.filter(m => m.status === 'failed');
+      const avgSuccessTime = successfulUrls.length > 0
+        ? successfulUrls.reduce((sum, m) => sum + (m.duration || 0), 0) / successfulUrls.length
+        : 0;
+      const avgFailedTime = failedUrls.length > 0
+        ? failedUrls.reduce((sum, m) => sum + (m.duration || 0), 0) / failedUrls.length
+        : 0;
+      
       if (process.env.NODE_ENV === "development") {
-        console.log(`📥 [IMPORT] Processing complete. Summary:`, {
-          successCount,
-          errorCount,
-          processedCount,
-          metadataFailedUrls: metadataFailedUrls.length,
-          skippedCount,
-          validUrlsLength: validUrls.length,
+        console.log(`📊 [IMPORT] Processing complete. Detailed Summary:`, {
+          timing: {
+            totalDuration: Math.round(totalDuration / 1000) + 's',
+            avgSuccessTime: Math.round(avgSuccessTime / 1000) + 's',
+            avgFailedTime: Math.round(avgFailedTime / 1000) + 's',
+            fastestUrl: successfulUrls.length > 0 ? Math.round(Math.min(...successfulUrls.map(m => m.duration || 0)) / 1000) + 's' : 'N/A',
+            slowestUrl: successfulUrls.length > 0 ? Math.round(Math.max(...successfulUrls.map(m => m.duration || 0)) / 1000) + 's' : 'N/A',
+          },
+          results: {
+            totalUrls: validUrls.length,
+            processed: processedCount,
+            success: successCount,
+            failed: errorCount,
+            metadataFailed: metadataFailedUrls.length,
+            skipped: skippedCount,
+          },
+          pending: {
+            runningPromises: runningPromises.size,
+            abortRegistryCount: abortRegistry?.getCount() || 0,
+          },
         });
       }
 
@@ -1362,60 +1508,167 @@ export function UrlBulkImportExport({
         abortControllerRef.current = null;
       }
 
+      const finallyStartTime = Date.now();
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🏁 [IMPORT] [FINALLY] Starting final cleanup phase...`, {
+          timestamp: new Date().toISOString(),
+          abortRegistryCount: abortRegistry?.getCount() || 0,
+        });
+      }
+      
       // Cancel all pending getList requests that might be stuck
       cancelPendingGetList();
+      if (process.env.NODE_ENV === "development") {
+        console.log(`✅ [IMPORT] [FINALLY] Cancelled pending getList requests`);
+      }
 
       // CRITICAL: Abort ALL tracked fetch requests globally
       // This ensures no requests (including RSC requests) block navigation
       if (typeof window !== "undefined" && abortRegistry) {
         const abortedCount = abortRegistry.getCount();
+        
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🛑 [IMPORT] [FINALLY] Starting global abort...`, {
+            trackedRequests: abortedCount,
+          });
+        }
+        
         abortRegistry.abortAll();
 
-        if (process.env.NODE_ENV === "development" && abortedCount > 0) {
-          console.debug(
-            `🛑 [IMPORT] Aborted ${abortedCount} tracked request(s) - navigation should work now`
-          );
+        if (process.env.NODE_ENV === "development") {
+          const abortDuration = Date.now() - finallyStartTime;
+          console.log(`🛑 [IMPORT] [FINALLY] Global abort completed in ${abortDuration}ms`, {
+            abortedRequests: abortedCount,
+            remainingCount: abortRegistry.getCount(),
+          });
         }
 
-        // CRITICAL: Force abort Next.js router RSC prefetch requests
-        // These are internal Next.js requests that block navigation
-        // We need to clear the router's prefetch cache and abort pending RSC requests
-        setTimeout(() => {
-          try {
-            // Access Next.js router internals to clear prefetch cache
-            const nextRouter = (window as any).__NEXT_DATA__?.router;
-            if (nextRouter) {
-              // Clear prefetch cache
-              if (nextRouter.prefetchCache) {
-                nextRouter.prefetchCache.clear();
+        // CRITICAL: Clear Next.js router cache IMMEDIATELY (not in setTimeout)
+        // This must happen before aborting to prevent new requests from starting
+        const routerCleanupStartTime = Date.now();
+        try {
+          if (process.env.NODE_ENV === "development") {
+            console.log(`🧹 [IMPORT] [FINALLY] Attempting router cache cleanup IMMEDIATELY...`);
+          }
+          
+          // Access Next.js router internals to clear prefetch cache
+          const nextRouter = (window as any).__NEXT_DATA__?.router;
+          if (nextRouter) {
+            // Clear prefetch cache
+            if (nextRouter.prefetchCache) {
+              nextRouter.prefetchCache.clear();
+              if (process.env.NODE_ENV === "development") {
+                console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js prefetch cache`);
               }
+            }
 
-              // Try to abort pending RSC requests via router internals
-              // This is a workaround since Next.js doesn't expose abort for RSC prefetches
-              const routerInstance = (window as any).__nextRouter;
-              if (routerInstance) {
-                // Clear any pending navigation state
-                if (routerInstance.isPending) {
-                  routerInstance.isPending = false;
+            // Try to abort pending RSC requests via router internals
+            // This is a workaround since Next.js doesn't expose abort for RSC prefetches
+            const routerInstance = (window as any).__nextRouter;
+            if (routerInstance) {
+              // Clear any pending navigation state
+              if (routerInstance.isPending !== undefined) {
+                routerInstance.isPending = false;
+                if (process.env.NODE_ENV === "development") {
+                  console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js router pending state`);
+                }
+              }
+              
+              // Try to clear router cache directly
+              if (routerInstance.cache) {
+                routerInstance.cache.clear?.();
+                if (process.env.NODE_ENV === "development") {
+                  console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js router cache`);
                 }
               }
             }
+          }
 
-            // Force clear Next.js internal fetch cache for RSC requests
-            const nextFetchCache = (window as any).__nextFetchCache;
-            if (nextFetchCache) {
-              nextFetchCache.clear();
-            }
-          } catch (e) {
-            // Ignore - Next.js internal API might change
+          // Force clear Next.js internal fetch cache for RSC requests
+          const nextFetchCache = (window as any).__nextFetchCache;
+          if (nextFetchCache) {
+            nextFetchCache.clear();
             if (process.env.NODE_ENV === "development") {
-              console.debug(
-                "[IMPORT] Could not clear Next.js router cache:",
-                e
-              );
+              console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js fetch cache`);
             }
           }
-        }, 100);
+          
+          // CRITICAL: Also try to access Next.js router's internal promise queue
+          // and abort pending RSC requests
+          try {
+            const routerInternals = (window as any).__NEXT_ROUTER_BASEPATH;
+            const routerCache = (window as any).__NEXT_ROUTER_CACHE;
+            if (routerCache && typeof routerCache.clear === "function") {
+              routerCache.clear();
+              if (process.env.NODE_ENV === "development") {
+                console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js router internal cache`);
+              }
+            }
+          } catch (e) {
+            // Ignore - internal API might not exist
+          }
+          
+          if (process.env.NODE_ENV === "development") {
+            const routerCleanupDuration = Date.now() - routerCleanupStartTime;
+            console.log(`✅ [IMPORT] [FINALLY] Router cleanup completed in ${routerCleanupDuration}ms`);
+          }
+        } catch (e) {
+          // Ignore - Next.js internal API might change
+          if (process.env.NODE_ENV === "development") {
+            const routerCleanupDuration = Date.now() - routerCleanupStartTime;
+            console.warn(`⚠️ [IMPORT] [FINALLY] Router cleanup failed after ${routerCleanupDuration}ms:`, e);
+          }
+        }
+
+        // CRITICAL: Additional delayed cleanup to catch any requests that started after initial cleanup
+        setTimeout(() => {
+          try {
+            // Abort any new requests that might have started
+            if (abortRegistry) {
+              abortRegistry.abortAll();
+            }
+            
+            // Force clear router cache again to be safe
+            const nextRouter = (window as any).__NEXT_DATA__?.router;
+            if (nextRouter?.prefetchCache) {
+              nextRouter.prefetchCache.clear();
+            }
+          } catch (e) {
+            // Ignore errors
+          }
+        }, 50);
+      } else if (process.env.NODE_ENV === "development") {
+        console.warn(`⚠️ [IMPORT] [FINALLY] Abort registry not available`);
+      }
+      
+      // CRITICAL: Stop global fetch interception after cleanup
+      // This restores normal fetch behavior
+      // Wait longer to ensure all cleanup is complete before stopping interception
+      if (typeof window !== "undefined" && abortRegistry) {
+        // Wait longer before stopping to ensure:
+        // 1. All abort signals are processed
+        // 2. Router cache is cleared
+        // 3. No new requests are starting
+        setTimeout(() => {
+          if (abortRegistry) {
+            // Final abort check before stopping
+            abortRegistry.abortAll();
+            
+            // Stop interception
+            abortRegistry.stopGlobalInterception();
+            
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🔍 [IMPORT] [FINALLY] Stopped global fetch interception after final cleanup`);
+            }
+          }
+        }, 1000);
+      }
+
+      const finallyEndTime = Date.now();
+      const finallyDuration = finallyEndTime - finallyStartTime;
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🏁 [IMPORT] [FINALLY] Final cleanup phase completed in ${finallyDuration}ms`);
+        console.log(`✅ [IMPORT] Import fully cleaned up - page should be responsive now`);
       }
 
       // Mark import as inactive
@@ -1425,25 +1678,140 @@ export function UrlBulkImportExport({
       if (isMountedRef.current) {
         setIsImporting(false);
 
-        // CRITICAL: Wait for all abort signals to propagate
+        // CRITICAL: Wait for all abort signals to propagate AND clear router cache again
         // Increased delay to ensure Next.js router processes all aborts
         // Navigation will work AFTER this delay completes
         // The delay allows:
         // 1. All registered fetch requests to be aborted
         // 2. Next.js router to process abort signals
         // 3. Browser to clear pending network requests
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        // 4. Router cache to be fully cleared
+        const waitStartTime = Date.now();
+        if (process.env.NODE_ENV === "development") {
+          console.log(`⏳ [IMPORT] Waiting for abort signals to propagate (500ms)...`, {
+            abortRegistryCount: abortRegistry?.getCount() || 0,
+            isImportActive: isImportActiveRef.current,
+          });
+        }
+        
+        // Wait and clear router cache during the wait
+        await new Promise((resolve) => {
+          // Clear router cache after 100ms of wait
+          setTimeout(() => {
+            try {
+              // Force clear all Next.js router caches again during wait
+              const nextRouter = (window as any).__NEXT_DATA__?.router;
+              if (nextRouter?.prefetchCache) {
+                nextRouter.prefetchCache.clear();
+              }
+              
+              const routerInstance = (window as any).__nextRouter;
+              if (routerInstance) {
+                if (routerInstance.isPending !== undefined) {
+                  routerInstance.isPending = false;
+                }
+                if (routerInstance.cache) {
+                  routerInstance.cache.clear?.();
+                }
+              }
+              
+              const nextFetchCache = (window as any).__nextFetchCache;
+              if (nextFetchCache) {
+                nextFetchCache.clear();
+              }
+              
+              // Abort any new requests that might have started
+              if (abortRegistry) {
+                abortRegistry.abortAll();
+              }
+              
+              if (process.env.NODE_ENV === "development") {
+                console.log(`🧹 [IMPORT] Cleared router cache again during wait`);
+              }
+            } catch (e) {
+              // Ignore errors
+            }
+          }, 100);
+          
+          // Complete wait after total 500ms
+          setTimeout(resolve, 500);
+        });
+        
+        if (process.env.NODE_ENV === "development") {
+          const waitDuration = Date.now() - waitStartTime;
+          console.log(`✅ [IMPORT] Wait completed in ${waitDuration}ms, checking final state...`, {
+            abortRegistryCount: abortRegistry?.getCount() || 0,
+          });
+        }
 
-        // CRITICAL: Clear global flag AFTER aborting all requests and waiting
-        // This prevents Next.js router from making new prefetch requests too soon
-        // If we clear it too early, router will start prefetching while requests are still aborting
+        // CRITICAL: Force abort ALL requests (including Next.js internal) before clearing flags
+        // This is a nuclear option to ensure NO requests are pending
+        if (typeof window !== "undefined" && abortRegistry) {
+          if (process.env.NODE_ENV === "development") {
+            console.log(`🛑 [IMPORT] Force aborting ALL global requests before clearing flags...`);
+          }
+          abortRegistry.forceAbortAllGlobal();
+        }
+        
+        // Additional wait to ensure router cache is fully cleared and all aborts are processed
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        
         if (typeof window !== "undefined") {
+          if (process.env.NODE_ENV === "development") {
+            console.log(`🏁 [IMPORT] Finalizing import and allowing navigation...`, {
+              abortRegistryCount: abortRegistry?.getCount() || 0,
+              willClearFlag: true,
+            });
+          }
+          
+          // CRITICAL: Clear router cache ONE MORE TIME before clearing flags
+          // This ensures Next.js router is in a clean state
+          try {
+            const nextRouter = (window as any).__NEXT_DATA__?.router;
+            if (nextRouter?.prefetchCache) {
+              nextRouter.prefetchCache.clear();
+            }
+            
+            const routerInstance = (window as any).__nextRouter;
+            if (routerInstance) {
+              if (routerInstance.isPending !== undefined) {
+                routerInstance.isPending = false;
+              }
+              if (routerInstance.cache) {
+                routerInstance.cache.clear?.();
+              }
+            }
+            
+            const nextFetchCache = (window as any).__nextFetchCache;
+            if (nextFetchCache) {
+              nextFetchCache.clear();
+            }
+          } catch (e) {
+            // Ignore errors
+          }
+          
+          // Clear the bulk import active flag
           (window as any).__bulkImportActive = false;
+          
           // Also set a flag indicating import just completed (for navigation checks)
+          // This prevents immediate navigation attempts that might trigger stuck RSC requests
           (window as any).__bulkImportJustCompleted = true;
-          // Clear the flag after a short delay
+          
+          if (process.env.NODE_ENV === "development") {
+            console.log(`✅ [IMPORT] Import flags cleared - page should be responsive now`, {
+              __bulkImportActive: false,
+              __bulkImportJustCompleted: true,
+              abortRegistryCount: abortRegistry?.getCount() || 0,
+            });
+          }
+          
+          // Clear the "just completed" flag after a delay to allow safe navigation
+          // This gives Next.js router time to clear its internal state
           setTimeout(() => {
             (window as any).__bulkImportJustCompleted = false;
+            if (process.env.NODE_ENV === "development") {
+              console.log(`✅ [IMPORT] Import fully completed - navigation should work normally now`);
+            }
           }, 1000);
         }
 
