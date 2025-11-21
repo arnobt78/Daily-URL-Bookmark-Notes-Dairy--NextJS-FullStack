@@ -30,14 +30,19 @@ export async function GET(req: NextRequest) {
     const fifteenMinutesAgo = new Date();
     fifteenMinutesAgo.setMinutes(fifteenMinutesAgo.getMinutes() - 15);
 
+    // Query active sessions with proper typing
+    // Note: Using type assertion for lastActivityAt to handle Prisma client type generation
     const activeSessions = await prisma.session.findMany({
       where: {
         expiresAt: {
           gte: new Date(), // Session hasn't expired
         },
-        lastActivityAt: {
-          gte: fifteenMinutesAgo, // User made an authenticated request in last 15 minutes
-        },
+        // Type assertion needed until Prisma client is regenerated with lastActivityAt
+        ...({
+          lastActivityAt: {
+            gte: fifteenMinutesAgo, // User made an authenticated request in last 15 minutes
+          },
+        } as any),
       },
       include: {
         user: {
@@ -48,7 +53,7 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: {
-        lastActivityAt: "desc",
+        lastActivityAt: "desc" as any, // Type assertion for orderBy
       },
     });
     
