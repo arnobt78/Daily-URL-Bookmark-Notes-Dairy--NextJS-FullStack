@@ -54,4 +54,5 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 db-data
 .swc
+package-lock.json
 .package-lock.json
