@@ -654,7 +654,9 @@ export function UrlBulkImportExport({
       if (typeof window !== "undefined" && abortRegistry) {
         abortRegistry.startGlobalInterception();
         if (process.env.NODE_ENV === "development") {
-          console.log(`🔍 [IMPORT] Started global fetch interception for RSC request tracking`);
+          console.log(
+            `🔍 [IMPORT] Started global fetch interception for RSC request tracking`
+          );
         }
       }
 
@@ -681,21 +683,110 @@ export function UrlBulkImportExport({
         return decodeHtmlEntities(cleaned) || undefined;
       };
 
+      // NEW: Try bulk import API for better performance
+      // DISABLED temporarily - causes Next.js dev server connection pool exhaustion
+      const USE_BULK_IMPORT = true;
+
+      if (USE_BULK_IMPORT) {
+        try {
+          // Get current list ID from store
+          const { currentList } = await import("@/stores/urlListStore");
+          const current = currentList.get();
+          if (!current.id) {
+            throw new Error("No list ID found");
+          }
+
+          // Send all URLs at once to bulk import endpoint
+          const response = await fetch(`/api/lists/${current.id}/bulk-import`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              urls: validUrls.map((item) => ({
+                url: item.url,
+                title: item.title,
+                tags: item.tags,
+                notes: item.notes,
+                reminder: item.reminder,
+                category: item.category,
+                isFavorite: item.isFavorite,
+                isPinned: item.isPinned,
+              })),
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Bulk import failed: ${response.statusText}`);
+          }
+
+          const result = await response.json();
+
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `✅ [BULK IMPORT] Successfully imported ${result.urls.length} URLs`
+            );
+          }
+
+          // Update UI
+          setIsImporting(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+
+          toast({
+            title: "Import successful!",
+            description: `Successfully imported ${result.urls.length} URLs. Reloading page...`,
+          });
+
+          if (onBulkOperationEnd) {
+            onBulkOperationEnd();
+          }
+
+          // CRITICAL: Force page reload to clear server state and prevent connection pool exhaustion
+          // The Next.js dev server can't handle the load from bulk import + SSE + metadata fetching
+          // A hard reload ensures a clean slate
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              "🔄 [BULK IMPORT] Forcing page reload to clear server state..."
+            );
+            // Set flag in sessionStorage to skip metadata fetch after reload
+            sessionStorage.setItem("skipMetadataAfterBulkImport", "true");
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          }
+
+          return; // Exit early - bulk import succeeded
+        } catch (error) {
+          console.error(
+            "❌ [BULK IMPORT] Failed, falling back to one-by-one:",
+            error
+          );
+          // Fall through to one-by-one import
+        }
+      }
+
       // Concurrency queue: Process 2 URLs in parallel, start next immediately when any finishes
       // Reduced to 2 to avoid overwhelming the server and prevent request timeouts
       // Sequential processing (1 at a time) would be too slow for large imports
-      const CONCURRENCY_LIMIT = 2;
+      // Reduced from 2 -> 1 to avoid server saturation / dev server hang after large imports
+      const CONCURRENCY_LIMIT = 1;
       let successCount = 0;
-      
+
       // CRITICAL: Track import timing and metrics for debugging
       const importStartTime = Date.now();
       const importMetrics = {
         startTime: importStartTime,
-        urlTimings: [] as Array<{ url: string; startTime: number; endTime?: number; duration?: number; status: 'success' | 'failed' | 'pending' }>,
+        urlTimings: [] as Array<{
+          url: string;
+          startTime: number;
+          endTime?: number;
+          duration?: number;
+          status: "success" | "failed" | "pending";
+        }>,
         totalUrls: validUrls.length,
         concurrencyLimit: CONCURRENCY_LIMIT,
       };
-      
+
       if (process.env.NODE_ENV === "development") {
         console.log(`🕐 [IMPORT] Import metrics initialized:`, {
           totalUrls: importMetrics.totalUrls,
@@ -732,6 +823,8 @@ export function UrlBulkImportExport({
           // Try to fetch metadata with 10-second timeout (faster failure, less blocking)
           let metadata: UrlMetadata = {};
           let metadataFetched = false;
+          let metadataWasCancelled = false; // Track if metadata was cancelled (but import still active)
+
           try {
             // Check again before starting metadata fetch (use ref to get current signal)
             const signalBeforeFetch = getCurrentSignal();
@@ -742,11 +835,40 @@ export function UrlBulkImportExport({
             ) {
               return;
             }
-            metadata = await fetchUrlMetadata(
-              urlItem.url,
-              10000,
-              signalBeforeFetch || abortSignal
-            ); // 10 second timeout with cancellation
+
+            // Create a separate abort controller for metadata fetch
+            // This allows metadata to be cancelled independently without cancelling URL addition
+            const metadataAbortController = new AbortController();
+
+            // Link metadata controller to overall abort signal
+            // If overall import is cancelled, cancel metadata too
+            if (signalBeforeFetch) {
+              signalBeforeFetch.addEventListener("abort", () => {
+                if (!metadataAbortController.signal.aborted) {
+                  metadataAbortController.abort();
+                }
+              });
+            }
+
+            // Also register timeout for metadata (10 seconds)
+            const metadataTimeout = setTimeout(() => {
+              if (!metadataAbortController.signal.aborted) {
+                metadataAbortController.abort();
+                metadataWasCancelled = true; // Mark as cancelled (timeout, not user cancellation)
+              }
+            }, 10000);
+
+            try {
+              metadata = await fetchUrlMetadata(
+                urlItem.url,
+                10000,
+                metadataAbortController.signal // Use metadata-specific signal
+              );
+              clearTimeout(metadataTimeout);
+            } catch (err) {
+              clearTimeout(metadataTimeout);
+              throw err; // Re-throw to outer catch block
+            }
 
             // Check if metadata was successfully fetched (has meaningful data)
             metadataFetched = Boolean(
@@ -775,22 +897,53 @@ export function UrlBulkImportExport({
               metadataFailedUrls.push(urlItem.url);
             }
           } catch (metadataError) {
-            // Metadata fetch failed - that's okay, we'll use imported data
-            // Track URLs that failed metadata fetch (suppress console warnings)
-            metadataFailedUrls.push(urlItem.url);
-            // Continue with empty metadata - we'll use imported title/description
-            // Don't log AbortError - it's expected when cancelling
-            if (
-              process.env.NODE_ENV === "development" &&
-              !(
-                metadataError instanceof Error &&
-                metadataError.name === "AbortError"
-              )
-            ) {
-              console.debug(
-                `Metadata fetch failed for ${urlItem.url}:`,
-                metadataError
-              );
+            // CRITICAL: If metadata fetch was aborted/cancelled, continue with imported data
+            // Still add URL to list, but use imported title/URL directly (no metadata)
+            // This prevents pending URL API requests while still adding the URL card
+            const isAborted =
+              metadataError instanceof Error &&
+              (metadataError.name === "AbortError" ||
+                metadataError.message === "Request aborted" ||
+                metadataError.message.includes("aborted"));
+
+            // Check if overall import was cancelled (not just metadata timeout)
+            const overallImportCancelled =
+              getCurrentSignal()?.aborted || !isImportActiveRef.current;
+
+            if (isAborted) {
+              // Metadata fetch was cancelled
+              metadataFailedUrls.push(urlItem.url);
+
+              if (overallImportCancelled) {
+                // Overall import was cancelled - skip this URL
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    `⏭️ [IMPORT] Overall import cancelled for ${urlItem.url}, skipping URL`
+                  );
+                }
+                return; // Skip URL addition
+              } else {
+                // Only metadata was cancelled (timeout/network) - continue with imported data
+                // URL will still be added with imported title/URL, just without metadata
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    `⏭️ [IMPORT] Metadata cancelled for ${urlItem.url}, using imported data directly (no metadata) - URL will still be added`
+                  );
+                }
+                // Continue to addUrlToList with imported title/URL
+                // metadata remains {} (empty)
+              }
+            } else {
+              // Metadata fetch failed (but not aborted) - that's okay, we'll use imported data
+              // Track URLs that failed metadata fetch (suppress console warnings)
+              metadataFailedUrls.push(urlItem.url);
+              // Continue with empty metadata - we'll use imported title/description
+              if (process.env.NODE_ENV === "development") {
+                console.debug(
+                  `Metadata fetch failed for ${urlItem.url}:`,
+                  metadataError
+                );
+              }
             }
           }
 
@@ -804,25 +957,39 @@ export function UrlBulkImportExport({
           const finalCategory =
             urlItem.category || metadata.siteName || undefined;
 
-          // Check again before adding URL (use ref to get current signal)
+          // CRITICAL: Check again before adding URL (use ref to get current signal)
+          // If aborted at any point, skip addUrlToList to prevent pending requests
           const signalBeforeAdd = getCurrentSignal();
           if (
             signalBeforeAdd?.aborted ||
             !isMountedRef.current ||
             !isImportActiveRef.current
           ) {
+            if (
+              process.env.NODE_ENV === "development" &&
+              signalBeforeAdd?.aborted
+            ) {
+              console.log(
+                `⏭️ [IMPORT] Signal aborted before addUrlToList for ${urlItem.url}, skipping to prevent pending request`
+              );
+            }
             return;
           }
 
           // Add URL to list (using imported data, with metadata as fallback)
-          // Wrap in timeout to prevent hanging indefinitely (30 second max wait)
+          // Wrap in timeout to prevent hanging indefinitely (10 second max wait)
           // Also pass abort signal to allow cancellation
           try {
-            const getCurrentSignal = () => abortControllerRef.current?.signal;
             const currentAbortSignal = getCurrentSignal();
 
-            // Check if aborted before attempting to add
+            // CRITICAL: Final check if aborted before attempting to add
+            // This prevents starting addUrlToList if signal was aborted during metadata fetch
             if (currentAbortSignal?.aborted) {
+              if (process.env.NODE_ENV === "development") {
+                console.log(
+                  `⏭️ [IMPORT] Signal aborted before addUrlToList call for ${urlItem.url}, exiting immediately`
+                );
+              }
               return;
             }
 
@@ -841,8 +1008,8 @@ export function UrlBulkImportExport({
               new Promise<void>((_, reject) =>
                 setTimeout(
                   () =>
-                    reject(new Error("addUrlToList timeout after 10 seconds")),
-                  10000 // Reduced to 10 seconds to match server-side timeout expectations
+                    reject(new Error("addUrlToList timeout after 3 seconds")),
+                  3000 // Reduced to 3 seconds to fail faster and prevent server saturation
                 )
               ),
             ]);
@@ -858,6 +1025,8 @@ export function UrlBulkImportExport({
                   : String(addUrlError)
               );
             }
+            // Yield event loop after error to prevent server saturation
+            await new Promise((resolve) => setTimeout(resolve, 0));
             // Re-throw to be caught by outer catch block
             throw addUrlError;
           }
@@ -990,14 +1159,14 @@ export function UrlBulkImportExport({
 
         const urlStartTime = Date.now();
         promiseStartTimes.set(currentIndex, urlStartTime);
-        
+
         // Track URL in metrics
         importMetrics.urlTimings.push({
           url: urlItem.url,
           startTime: urlStartTime,
-          status: 'pending',
+          status: "pending",
         });
-        
+
         if (process.env.NODE_ENV === "development") {
           const elapsed = Math.round((urlStartTime - importStartTime) / 1000);
           console.log(
@@ -1008,41 +1177,52 @@ export function UrlBulkImportExport({
         }
 
         const promise = processUrl(urlItem)
-          .then(() => {
+          .then(async () => {
             const urlEndTime = Date.now();
             const urlDuration = urlEndTime - urlStartTime;
             completedCount++;
-            
+
             // Update metrics
-            const urlMetric = importMetrics.urlTimings.find(m => m.url === urlItem.url && m.status === 'pending');
+            const urlMetric = importMetrics.urlTimings.find(
+              (m) => m.url === urlItem.url && m.status === "pending"
+            );
             if (urlMetric) {
               urlMetric.endTime = urlEndTime;
               urlMetric.duration = urlDuration;
-              urlMetric.status = 'success';
+              urlMetric.status = "success";
             }
-            
+
             if (process.env.NODE_ENV === "development") {
               const elapsed = Math.round((urlEndTime - importStartTime) / 1000);
               console.log(
                 `✅ [IMPORT] [${elapsed}s] URL ${currentIndex + 1}/${
                   validUrls.length
-                } completed in ${Math.round(urlDuration / 1000)}s (${completedCount}/${validUrls.length} total, ${successCount} success, ${errorCount} failed)`
+                } completed in ${Math.round(
+                  urlDuration / 1000
+                )}s (${completedCount}/${
+                  validUrls.length
+                } total, ${successCount} success, ${errorCount} failed)`
               );
             }
+
+            // Yield to event loop to prevent server saturation
+            await new Promise((resolve) => setTimeout(resolve, 0));
           })
           .catch((error) => {
             const urlEndTime = Date.now();
             const urlDuration = urlEndTime - urlStartTime;
             completedCount++;
-            
+
             // Update metrics
-            const urlMetric = importMetrics.urlTimings.find(m => m.url === urlItem.url && m.status === 'pending');
+            const urlMetric = importMetrics.urlTimings.find(
+              (m) => m.url === urlItem.url && m.status === "pending"
+            );
             if (urlMetric) {
               urlMetric.endTime = urlEndTime;
               urlMetric.duration = urlDuration;
-              urlMetric.status = 'failed';
+              urlMetric.status = "failed";
             }
-            
+
             if (process.env.NODE_ENV === "development") {
               const elapsed = Math.round((urlEndTime - importStartTime) / 1000);
               console.error(
@@ -1053,12 +1233,16 @@ export function UrlBulkImportExport({
               );
             }
           })
-          .finally(() => {
+          .finally(async () => {
             // Remove this promise from running set when done
             runningPromises.delete(currentIndex);
             promiseStartTimes.delete(currentIndex);
 
-            // Immediately start the next URL when this one finishes (if import is still active)
+            // Increased throttle delay to 500ms to give server more breathing room
+            // This prevents server saturation when processing many URLs with timeouts
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Start the next URL when this one finishes (if import is still active)
             // Use ref to get current signal in case controller was recreated
             const signalForNext = abortControllerRef.current?.signal;
             if (
@@ -1250,34 +1434,39 @@ export function UrlBulkImportExport({
       ) {
         // Declare finalWaitStartTime outside try block so it's accessible in catch
         const finalWaitStartTime = Date.now();
-        
+
         if (process.env.NODE_ENV === "development") {
-          console.log(`⏳ [IMPORT] Starting final wait for ${runningPromises.size} remaining promise(s)...`, {
-            promiseIndices: Array.from(runningPromises.keys()),
-          });
+          console.log(
+            `⏳ [IMPORT] Starting final wait for ${runningPromises.size} remaining promise(s)...`,
+            {
+              promiseIndices: Array.from(runningPromises.keys()),
+            }
+          );
         }
-        
+
         try {
-            // Wait max 10 seconds for remaining promises, then force abort
-            const finalWaitTimeout = new Promise<void>((resolve) => {
-              setTimeout(() => {
-                const waitDuration = Date.now() - finalWaitStartTime;
-                if (process.env.NODE_ENV === "development") {
-                  console.warn(
-                    `⚠️ [IMPORT] Final wait timeout after ${Math.round(waitDuration / 1000)}s - aborting remaining ${runningPromises.size} request(s)`,
-                    {
-                      pendingIndices: Array.from(runningPromises.keys()),
-                      abortRegistryCount: abortRegistry?.getCount() || 0,
-                    }
-                  );
-                }
-                // Abort all pending requests
-                if (abortControllerRef.current) {
-                  abortControllerRef.current.abort();
-                }
-                resolve();
-              }, 10000); // 10 second timeout for final wait
-            });
+          // Wait max 10 seconds for remaining promises, then force abort
+          const finalWaitTimeout = new Promise<void>((resolve) => {
+            setTimeout(() => {
+              const waitDuration = Date.now() - finalWaitStartTime;
+              if (process.env.NODE_ENV === "development") {
+                console.warn(
+                  `⚠️ [IMPORT] Final wait timeout after ${Math.round(
+                    waitDuration / 1000
+                  )}s - aborting remaining ${runningPromises.size} request(s)`,
+                  {
+                    pendingIndices: Array.from(runningPromises.keys()),
+                    abortRegistryCount: abortRegistry?.getCount() || 0,
+                  }
+                );
+              }
+              // Abort all pending requests
+              if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+              }
+              resolve();
+            }, 10000); // 10 second timeout for final wait
+          });
 
           const results = await Promise.race([
             Promise.allSettled(Array.from(runningPromises.values())),
@@ -1298,40 +1487,61 @@ export function UrlBulkImportExport({
               errorCount++;
             }
           });
-          
+
           if (process.env.NODE_ENV === "development") {
             const finalWaitDuration = Date.now() - finalWaitStartTime;
-            console.log(`✅ [IMPORT] Final wait completed in ${Math.round(finalWaitDuration / 1000)}s`, {
-              remainingPromises: runningPromises.size,
-              abortRegistryCount: abortRegistry?.getCount() || 0,
-            });
+            console.log(
+              `✅ [IMPORT] Final wait completed in ${Math.round(
+                finalWaitDuration / 1000
+              )}s`,
+              {
+                remainingPromises: runningPromises.size,
+                abortRegistryCount: abortRegistry?.getCount() || 0,
+              }
+            );
           }
         } catch (error) {
           const finalWaitDuration = Date.now() - finalWaitStartTime;
           if (process.env.NODE_ENV === "development") {
-            console.error(`❌ [IMPORT] Error in final wait after ${Math.round(finalWaitDuration / 1000)}s:`, error);
+            console.error(
+              `❌ [IMPORT] Error in final wait after ${Math.round(
+                finalWaitDuration / 1000
+              )}s:`,
+              error
+            );
           }
         }
-      } else if (process.env.NODE_ENV === "development" && runningPromises.size > 0) {
-        console.log(`⏭️ [IMPORT] Skipping final wait - import inactive or aborted`, {
-          pendingPromises: runningPromises.size,
-          isImportActive: isImportActiveRef.current,
-          isAborted: signalForWait?.aborted || false,
-        });
+      } else if (
+        process.env.NODE_ENV === "development" &&
+        runningPromises.size > 0
+      ) {
+        console.log(
+          `⏭️ [IMPORT] Skipping final wait - import inactive or aborted`,
+          {
+            pendingPromises: runningPromises.size,
+            isImportActive: isImportActiveRef.current,
+            isAborted: signalForWait?.aborted || false,
+          }
+        );
       }
 
       const processingEndTime = Date.now();
       const processingDuration = processingEndTime - importStartTime;
-      
+
       if (process.env.NODE_ENV === "development") {
-        console.log(`⏱️ [IMPORT] Processing loop completed in ${Math.round(processingDuration / 1000)}s`, {
-          totalUrls: validUrls.length,
-          processed: processedCount,
-          success: successCount,
-          failed: errorCount,
-          pending: runningPromises.size,
-          elapsed: Math.round(processingDuration / 1000) + 's',
-        });
+        console.log(
+          `⏱️ [IMPORT] Processing loop completed in ${Math.round(
+            processingDuration / 1000
+          )}s`,
+          {
+            totalUrls: validUrls.length,
+            processed: processedCount,
+            success: successCount,
+            failed: errorCount,
+            pending: runningPromises.size,
+            elapsed: Math.round(processingDuration / 1000) + "s",
+          }
+        );
       }
 
       // CRITICAL: Abort all pending requests before clearing controller
@@ -1343,7 +1553,7 @@ export function UrlBulkImportExport({
           abortRegistryCount: abortRegistry?.getCount() || 0,
         });
       }
-      
+
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         if (process.env.NODE_ENV === "development") {
@@ -1362,10 +1572,14 @@ export function UrlBulkImportExport({
       // This prevents the page from getting stuck with pending requests
       // and allows RSC (React Server Components) requests to be cancelled too
       await new Promise((resolve) => setTimeout(resolve, 500));
-      
+
       if (process.env.NODE_ENV === "development") {
         const cleanupDuration = Date.now() - cleanupStartTime;
-        console.log(`🧹 [IMPORT] Initial cleanup completed in ${Math.round(cleanupDuration)}ms`);
+        console.log(
+          `🧹 [IMPORT] Initial cleanup completed in ${Math.round(
+            cleanupDuration
+          )}ms`
+        );
       }
 
       // Reset file input
@@ -1378,25 +1592,45 @@ export function UrlBulkImportExport({
 
       const summaryTime = Date.now();
       const totalDuration = summaryTime - importStartTime;
-      
+
       // Calculate average times
-      const successfulUrls = importMetrics.urlTimings.filter(m => m.status === 'success');
-      const failedUrls = importMetrics.urlTimings.filter(m => m.status === 'failed');
-      const avgSuccessTime = successfulUrls.length > 0
-        ? successfulUrls.reduce((sum, m) => sum + (m.duration || 0), 0) / successfulUrls.length
-        : 0;
-      const avgFailedTime = failedUrls.length > 0
-        ? failedUrls.reduce((sum, m) => sum + (m.duration || 0), 0) / failedUrls.length
-        : 0;
-      
+      const successfulUrls = importMetrics.urlTimings.filter(
+        (m) => m.status === "success"
+      );
+      const failedUrls = importMetrics.urlTimings.filter(
+        (m) => m.status === "failed"
+      );
+      const avgSuccessTime =
+        successfulUrls.length > 0
+          ? successfulUrls.reduce((sum, m) => sum + (m.duration || 0), 0) /
+            successfulUrls.length
+          : 0;
+      const avgFailedTime =
+        failedUrls.length > 0
+          ? failedUrls.reduce((sum, m) => sum + (m.duration || 0), 0) /
+            failedUrls.length
+          : 0;
+
       if (process.env.NODE_ENV === "development") {
         console.log(`📊 [IMPORT] Processing complete. Detailed Summary:`, {
           timing: {
-            totalDuration: Math.round(totalDuration / 1000) + 's',
-            avgSuccessTime: Math.round(avgSuccessTime / 1000) + 's',
-            avgFailedTime: Math.round(avgFailedTime / 1000) + 's',
-            fastestUrl: successfulUrls.length > 0 ? Math.round(Math.min(...successfulUrls.map(m => m.duration || 0)) / 1000) + 's' : 'N/A',
-            slowestUrl: successfulUrls.length > 0 ? Math.round(Math.max(...successfulUrls.map(m => m.duration || 0)) / 1000) + 's' : 'N/A',
+            totalDuration: Math.round(totalDuration / 1000) + "s",
+            avgSuccessTime: Math.round(avgSuccessTime / 1000) + "s",
+            avgFailedTime: Math.round(avgFailedTime / 1000) + "s",
+            fastestUrl:
+              successfulUrls.length > 0
+                ? Math.round(
+                    Math.min(...successfulUrls.map((m) => m.duration || 0)) /
+                      1000
+                  ) + "s"
+                : "N/A",
+            slowestUrl:
+              successfulUrls.length > 0
+                ? Math.round(
+                    Math.max(...successfulUrls.map((m) => m.duration || 0)) /
+                      1000
+                  ) + "s"
+                : "N/A",
           },
           results: {
             totalUrls: validUrls.length,
@@ -1509,13 +1743,26 @@ export function UrlBulkImportExport({
       }
 
       const finallyStartTime = Date.now();
+
+      // CRITICAL FIX: Clear __bulkImportActive flag FIRST before any other cleanup
+      // The fetch wrapper checks this flag - must be false BEFORE we stop interception
+      // Otherwise, pending RSC requests will still be intercepted even after "restoration"
+      if (typeof window !== "undefined") {
+        (window as any).__bulkImportActive = false;
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `🚫 [IMPORT] [FINALLY] Cleared __bulkImportActive flag FIRST (critical for wrapper bypass)`
+          );
+        }
+      }
+
       if (process.env.NODE_ENV === "development") {
         console.log(`🏁 [IMPORT] [FINALLY] Starting final cleanup phase...`, {
           timestamp: new Date().toISOString(),
           abortRegistryCount: abortRegistry?.getCount() || 0,
         });
       }
-      
+
       // Cancel all pending getList requests that might be stuck
       cancelPendingGetList();
       if (process.env.NODE_ENV === "development") {
@@ -1526,21 +1773,24 @@ export function UrlBulkImportExport({
       // This ensures no requests (including RSC requests) block navigation
       if (typeof window !== "undefined" && abortRegistry) {
         const abortedCount = abortRegistry.getCount();
-        
+
         if (process.env.NODE_ENV === "development") {
           console.log(`🛑 [IMPORT] [FINALLY] Starting global abort...`, {
             trackedRequests: abortedCount,
           });
         }
-        
+
         abortRegistry.abortAll();
 
         if (process.env.NODE_ENV === "development") {
           const abortDuration = Date.now() - finallyStartTime;
-          console.log(`🛑 [IMPORT] [FINALLY] Global abort completed in ${abortDuration}ms`, {
-            abortedRequests: abortedCount,
-            remainingCount: abortRegistry.getCount(),
-          });
+          console.log(
+            `🛑 [IMPORT] [FINALLY] Global abort completed in ${abortDuration}ms`,
+            {
+              abortedRequests: abortedCount,
+              remainingCount: abortRegistry.getCount(),
+            }
+          );
         }
 
         // CRITICAL: Clear Next.js router cache IMMEDIATELY (not in setTimeout)
@@ -1548,9 +1798,11 @@ export function UrlBulkImportExport({
         const routerCleanupStartTime = Date.now();
         try {
           if (process.env.NODE_ENV === "development") {
-            console.log(`🧹 [IMPORT] [FINALLY] Attempting router cache cleanup IMMEDIATELY...`);
+            console.log(
+              `🧹 [IMPORT] [FINALLY] Attempting router cache cleanup IMMEDIATELY...`
+            );
           }
-          
+
           // Access Next.js router internals to clear prefetch cache
           const nextRouter = (window as any).__NEXT_DATA__?.router;
           if (nextRouter) {
@@ -1558,7 +1810,9 @@ export function UrlBulkImportExport({
             if (nextRouter.prefetchCache) {
               nextRouter.prefetchCache.clear();
               if (process.env.NODE_ENV === "development") {
-                console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js prefetch cache`);
+                console.log(
+                  `✅ [IMPORT] [FINALLY] Cleared Next.js prefetch cache`
+                );
               }
             }
 
@@ -1570,15 +1824,19 @@ export function UrlBulkImportExport({
               if (routerInstance.isPending !== undefined) {
                 routerInstance.isPending = false;
                 if (process.env.NODE_ENV === "development") {
-                  console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js router pending state`);
+                  console.log(
+                    `✅ [IMPORT] [FINALLY] Cleared Next.js router pending state`
+                  );
                 }
               }
-              
+
               // Try to clear router cache directly
               if (routerInstance.cache) {
                 routerInstance.cache.clear?.();
                 if (process.env.NODE_ENV === "development") {
-                  console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js router cache`);
+                  console.log(
+                    `✅ [IMPORT] [FINALLY] Cleared Next.js router cache`
+                  );
                 }
               }
             }
@@ -1592,7 +1850,7 @@ export function UrlBulkImportExport({
               console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js fetch cache`);
             }
           }
-          
+
           // CRITICAL: Also try to access Next.js router's internal promise queue
           // and abort pending RSC requests
           try {
@@ -1601,22 +1859,29 @@ export function UrlBulkImportExport({
             if (routerCache && typeof routerCache.clear === "function") {
               routerCache.clear();
               if (process.env.NODE_ENV === "development") {
-                console.log(`✅ [IMPORT] [FINALLY] Cleared Next.js router internal cache`);
+                console.log(
+                  `✅ [IMPORT] [FINALLY] Cleared Next.js router internal cache`
+                );
               }
             }
           } catch (e) {
             // Ignore - internal API might not exist
           }
-          
+
           if (process.env.NODE_ENV === "development") {
             const routerCleanupDuration = Date.now() - routerCleanupStartTime;
-            console.log(`✅ [IMPORT] [FINALLY] Router cleanup completed in ${routerCleanupDuration}ms`);
+            console.log(
+              `✅ [IMPORT] [FINALLY] Router cleanup completed in ${routerCleanupDuration}ms`
+            );
           }
         } catch (e) {
           // Ignore - Next.js internal API might change
           if (process.env.NODE_ENV === "development") {
             const routerCleanupDuration = Date.now() - routerCleanupStartTime;
-            console.warn(`⚠️ [IMPORT] [FINALLY] Router cleanup failed after ${routerCleanupDuration}ms:`, e);
+            console.warn(
+              `⚠️ [IMPORT] [FINALLY] Router cleanup failed after ${routerCleanupDuration}ms:`,
+              e
+            );
           }
         }
 
@@ -1627,7 +1892,7 @@ export function UrlBulkImportExport({
             if (abortRegistry) {
               abortRegistry.abortAll();
             }
-            
+
             // Force clear router cache again to be safe
             const nextRouter = (window as any).__NEXT_DATA__?.router;
             if (nextRouter?.prefetchCache) {
@@ -1640,35 +1905,54 @@ export function UrlBulkImportExport({
       } else if (process.env.NODE_ENV === "development") {
         console.warn(`⚠️ [IMPORT] [FINALLY] Abort registry not available`);
       }
-      
-      // CRITICAL: Stop global fetch interception after cleanup
-      // This restores normal fetch behavior
-      // Wait longer to ensure all cleanup is complete before stopping interception
+
+      // CRITICAL: Stop global fetch interception IMMEDIATELY after aborting
+      // This prevents Next.js RSC requests from being intercepted and stuck
+      // We stop it BEFORE the wait period to ensure router can make fresh requests
       if (typeof window !== "undefined" && abortRegistry) {
-        // Wait longer before stopping to ensure:
-        // 1. All abort signals are processed
-        // 2. Router cache is cleared
-        // 3. No new requests are starting
+        // Abort all requests one more time
+        abortRegistry.abortAll();
+
+        // CRITICAL: Stop interception IMMEDIATELY, not after delay
+        // This allows Next.js router to make new requests without interception
+        abortRegistry.stopGlobalInterception();
+
+        // CRITICAL FIX: Call stopGlobalInterception again after a micro-delay
+        // to handle race conditions where the wrapper might be reinstalled
         setTimeout(() => {
-          if (abortRegistry) {
-            // Final abort check before stopping
-            abortRegistry.abortAll();
-            
-            // Stop interception
-            abortRegistry.stopGlobalInterception();
-            
-            if (process.env.NODE_ENV === "development") {
-              console.log(`🔍 [IMPORT] [FINALLY] Stopped global fetch interception after final cleanup`);
-            }
-          }
-        }, 1000);
+          abortRegistry?.stopGlobalInterception();
+        }, 10);
+
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `🔍 [IMPORT] [FINALLY] Stopped global fetch interception immediately (with retry scheduled)`
+          );
+        }
       }
 
       const finallyEndTime = Date.now();
       const finallyDuration = finallyEndTime - finallyStartTime;
       if (process.env.NODE_ENV === "development") {
-        console.log(`🏁 [IMPORT] [FINALLY] Final cleanup phase completed in ${finallyDuration}ms`);
-        console.log(`✅ [IMPORT] Import fully cleaned up - page should be responsive now`);
+        console.log(
+          `🏁 [IMPORT] [FINALLY] Final cleanup phase completed in ${finallyDuration}ms`
+        );
+        console.log(
+          `✅ [IMPORT] Import fully cleaned up - page should be responsive now`
+        );
+        // ADDITIVE: Enforce hard disable + native fetch restoration guard
+        try {
+          (window as any).__bulkImportDisableInterception = true;
+          const { abortRegistry } = require("@/utils/abortRegistry");
+          abortRegistry?.forceRestoreNativeFetch?.();
+          console.log(
+            "🛠 [IMPORT] Disabled interception & enforced native fetch restoration"
+          );
+        } catch (e) {
+          console.log(
+            "⚠️ [IMPORT] Native restoration enforcement encountered error (ignored)",
+            e
+          );
+        }
       }
 
       // Mark import as inactive
@@ -1688,12 +1972,15 @@ export function UrlBulkImportExport({
         // 4. Router cache to be fully cleared
         const waitStartTime = Date.now();
         if (process.env.NODE_ENV === "development") {
-          console.log(`⏳ [IMPORT] Waiting for abort signals to propagate (500ms)...`, {
-            abortRegistryCount: abortRegistry?.getCount() || 0,
-            isImportActive: isImportActiveRef.current,
-          });
+          console.log(
+            `⏳ [IMPORT] Waiting for abort signals to propagate (500ms)...`,
+            {
+              abortRegistryCount: abortRegistry?.getCount() || 0,
+              isImportActive: isImportActiveRef.current,
+            }
+          );
         }
-        
+
         // Wait and clear router cache during the wait
         await new Promise((resolve) => {
           // Clear router cache after 100ms of wait
@@ -1704,7 +1991,7 @@ export function UrlBulkImportExport({
               if (nextRouter?.prefetchCache) {
                 nextRouter.prefetchCache.clear();
               }
-              
+
               const routerInstance = (window as any).__nextRouter;
               if (routerInstance) {
                 if (routerInstance.isPending !== undefined) {
@@ -1714,56 +2001,76 @@ export function UrlBulkImportExport({
                   routerInstance.cache.clear?.();
                 }
               }
-              
+
               const nextFetchCache = (window as any).__nextFetchCache;
               if (nextFetchCache) {
                 nextFetchCache.clear();
               }
-              
+
               // Abort any new requests that might have started
               if (abortRegistry) {
                 abortRegistry.abortAll();
               }
-              
+
               if (process.env.NODE_ENV === "development") {
-                console.log(`🧹 [IMPORT] Cleared router cache again during wait`);
+                console.log(
+                  `🧹 [IMPORT] Cleared router cache again during wait`
+                );
               }
             } catch (e) {
               // Ignore errors
             }
           }, 100);
-          
+
           // Complete wait after total 500ms
           setTimeout(resolve, 500);
         });
-        
+
         if (process.env.NODE_ENV === "development") {
           const waitDuration = Date.now() - waitStartTime;
-          console.log(`✅ [IMPORT] Wait completed in ${waitDuration}ms, checking final state...`, {
-            abortRegistryCount: abortRegistry?.getCount() || 0,
-          });
+          console.log(
+            `✅ [IMPORT] Wait completed in ${waitDuration}ms, checking final state...`,
+            {
+              abortRegistryCount: abortRegistry?.getCount() || 0,
+            }
+          );
         }
 
         // CRITICAL: Force abort ALL requests (including Next.js internal) before clearing flags
         // This is a nuclear option to ensure NO requests are pending
         if (typeof window !== "undefined" && abortRegistry) {
           if (process.env.NODE_ENV === "development") {
-            console.log(`🛑 [IMPORT] Force aborting ALL global requests before clearing flags...`);
+            console.log(
+              `🛑 [IMPORT] Force aborting ALL global requests before clearing flags...`
+            );
           }
           abortRegistry.forceAbortAllGlobal();
+
+          // CRITICAL: Ensure interception is stopped before allowing navigation
+          // This prevents new RSC requests from being intercepted
+          if (abortRegistry) {
+            abortRegistry.stopGlobalInterception();
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🔍 [IMPORT] Ensured fetch interception is stopped`);
+            }
+          }
         }
-        
+
         // Additional wait to ensure router cache is fully cleared and all aborts are processed
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        
+        // This gives Next.js time to process abort signals and clear internal state
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
         if (typeof window !== "undefined") {
           if (process.env.NODE_ENV === "development") {
-            console.log(`🏁 [IMPORT] Finalizing import and allowing navigation...`, {
-              abortRegistryCount: abortRegistry?.getCount() || 0,
-              willClearFlag: true,
-            });
+            console.log(
+              `🏁 [IMPORT] Finalizing import and allowing navigation...`,
+              {
+                abortRegistryCount: abortRegistry?.getCount() || 0,
+                willClearFlag: true,
+              }
+            );
           }
-          
+
           // CRITICAL: Clear router cache ONE MORE TIME before clearing flags
           // This ensures Next.js router is in a clean state
           try {
@@ -1771,7 +2078,7 @@ export function UrlBulkImportExport({
             if (nextRouter?.prefetchCache) {
               nextRouter.prefetchCache.clear();
             }
-            
+
             const routerInstance = (window as any).__nextRouter;
             if (routerInstance) {
               if (routerInstance.isPending !== undefined) {
@@ -1781,7 +2088,7 @@ export function UrlBulkImportExport({
                 routerInstance.cache.clear?.();
               }
             }
-            
+
             const nextFetchCache = (window as any).__nextFetchCache;
             if (nextFetchCache) {
               nextFetchCache.clear();
@@ -1789,30 +2096,106 @@ export function UrlBulkImportExport({
           } catch (e) {
             // Ignore errors
           }
-          
-          // Clear the bulk import active flag
-          (window as any).__bulkImportActive = false;
-          
-          // Also set a flag indicating import just completed (for navigation checks)
-          // This prevents immediate navigation attempts that might trigger stuck RSC requests
+
+          // Set flag indicating import just completed (for navigation checks)
+          // Note: __bulkImportActive was already cleared at the START of finally block
           (window as any).__bulkImportJustCompleted = true;
-          
+
           if (process.env.NODE_ENV === "development") {
-            console.log(`✅ [IMPORT] Import flags cleared - page should be responsive now`, {
-              __bulkImportActive: false,
-              __bulkImportJustCompleted: true,
-              abortRegistryCount: abortRegistry?.getCount() || 0,
-            });
+            console.log(
+              `✅ [IMPORT] Import completion flag set - page should be responsive now`,
+              {
+                __bulkImportActive: (window as any).__bulkImportActive,
+                __bulkImportJustCompleted: true,
+                abortRegistryCount: abortRegistry?.getCount() || 0,
+              }
+            );
           }
-          
+
           // Clear the "just completed" flag after a delay to allow safe navigation
           // This gives Next.js router time to clear its internal state
           setTimeout(() => {
             (window as any).__bulkImportJustCompleted = false;
             if (process.env.NODE_ENV === "development") {
-              console.log(`✅ [IMPORT] Import fully completed - navigation should work normally now`);
+              console.log(
+                `✅ [IMPORT] Import fully completed - navigation should work normally now`
+              );
             }
           }, 1000);
+
+          // --- BEGIN ADDITIVE NAVIGATION RECOVERY (non-destructive) ---
+          // In rare cases (large Chrome bookmark imports) navigation can still appear "stuck"
+          // even after all cleanup logs report success. We add a passive recovery loop that:
+          // 1. Re-confirms interception is stopped.
+          // 2. Re-aborts any straggler requests.
+          // 3. Performs a gentle router refresh ping.
+          // 4. Falls back to a hard location.reload if still stuck after 5s.
+          // This code ONLY adds safeguards and does not remove or alter existing logic.
+          const startRecoveryTs = Date.now();
+          let recoveryAttempts = 0;
+          const recoveryInterval = window.setInterval(() => {
+            recoveryAttempts++;
+            const elapsed = Date.now() - startRecoveryTs;
+            const activeFlag = (window as any).__bulkImportActive === true;
+            const justCompletedFlag =
+              (window as any).__bulkImportJustCompleted === true;
+            const pendingCount = abortRegistry?.getCount() || 0;
+
+            // CRITICAL FIX: Every iteration, aggressively re-stop interception
+            // This ensures window.fetch is restored even if there were race conditions
+            abortRegistry?.stopGlobalInterception?.();
+
+            // If import somehow reactivated or interception restarted, stop it again.
+            if (activeFlag) {
+              (window as any).__bulkImportActive = false;
+              abortRegistry?.stopGlobalInterception?.();
+            }
+
+            // If we still see many pending requests after cleanup, abort them again.
+            if (pendingCount > 0) {
+              abortRegistry?.abortAll();
+            }
+
+            // Gentle router refresh ping (only once after initial second) to re-hydrate if needed.
+            if (elapsed > 1200 && recoveryAttempts === 2) {
+              try {
+                // Using a lightweight HEAD request to current URL as a connectivity nudge.
+                fetch(window.location.href, { method: "HEAD" }).catch(() => {});
+              } catch {}
+            }
+
+            // If after 5 seconds there are still pending requests or navigation feels stuck,
+            // perform a last safety: force abort all + hard reload.
+            if (elapsed > 5000) {
+              if (pendingCount > 0 || justCompletedFlag) {
+                abortRegistry?.forceAbortAllGlobal?.();
+                abortRegistry?.stopGlobalInterception?.();
+                // Only reload if user is still on same page and flags haven't cleared.
+                if ((window as any).__bulkImportJustCompleted) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.warn(
+                      "⚠️ [IMPORT] Navigation appears unresponsive after recovery window – performing hard reload"
+                    );
+                  }
+                  (window as any).__bulkImportJustCompleted = false;
+                  // Hard reload (no cache) to fully reset runtime state.
+                  window.location.reload();
+                }
+              }
+              window.clearInterval(recoveryInterval);
+            }
+
+            // Exit early if everything is clean and flags are cleared.
+            if (!activeFlag && !justCompletedFlag && pendingCount === 0) {
+              window.clearInterval(recoveryInterval);
+              if (process.env.NODE_ENV === "development") {
+                console.log(
+                  "✅ [IMPORT] Post-import navigation recovery confirmed clean; stopping recovery loop"
+                );
+              }
+            }
+          }, 500);
+          // --- END ADDITIVE NAVIGATION RECOVERY ---
         }
 
         // Notify parent that bulk operation is ending

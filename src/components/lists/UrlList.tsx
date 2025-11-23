@@ -352,6 +352,19 @@ export function UrlList() {
   }, [list?.id, list?.urls, queryClient, currentListHash]);
 
   useEffect(() => {
+    // CRITICAL: Skip metadata fetch if we just did a bulk import (dev server workaround)
+    // Check FIRST before ANY other logic
+    if (typeof window !== "undefined") {
+      const skipFlag = sessionStorage.getItem("skipMetadataAfterBulkImport");
+      if (skipFlag === "true") {
+        console.log(
+          `⏭️ [BATCH] Skipping ALL metadata fetches after bulk import (dev server workaround)`
+        );
+        // Keep flag set for entire session - don't clear it
+        return;
+      }
+    }
+
     const current = currentList.get();
     if (!current?.id || !current?.urls || current.urls.length === 0) {
       batchFetchCompleteRef.current = null;

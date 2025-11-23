@@ -34,34 +34,64 @@ export default function Navbar() {
           console.log(`⏸️ [NAVBAR] Navigation blocked - import active: ${isImportActive}, just completed: ${importJustCompleted}`);
         }
         
-        // CRITICAL: Force abort any pending requests before navigation
+        // CRITICAL: Force abort any pending requests and clear router cache
         // This ensures RSC requests don't get stuck
         try {
           const { abortRegistry } = require("@/utils/abortRegistry");
           if (abortRegistry) {
+            // Force abort all requests
             abortRegistry.forceAbortAllGlobal();
+            
+            // Ensure interception is stopped
+            abortRegistry.stopGlobalInterception();
+            
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🧹 [NAVBAR] Force cleaned up abort registry before navigation`);
+            }
           }
           
-          // Clear router cache before navigation
+          // Clear ALL Next.js router caches aggressively
           const nextRouter = (window as any).__NEXT_DATA__?.router;
           if (nextRouter?.prefetchCache) {
             nextRouter.prefetchCache.clear();
           }
+          
+          const routerInstance = (window as any).__nextRouter;
+          if (routerInstance) {
+            if (routerInstance.isPending !== undefined) {
+              routerInstance.isPending = false;
+            }
+            if (routerInstance.cache) {
+              routerInstance.cache.clear?.();
+            }
+          }
+          
+          const nextFetchCache = (window as any).__nextFetchCache;
+          if (nextFetchCache) {
+            nextFetchCache.clear();
+          }
+          
+          if (process.env.NODE_ENV === "development") {
+            console.log(`🧹 [NAVBAR] Cleared all Next.js router caches`);
+          }
         } catch (e) {
           // Ignore errors
+          if (process.env.NODE_ENV === "development") {
+            console.warn(`⚠️ [NAVBAR] Error during cleanup:`, e);
+          }
         }
         
-        // Wait a bit and retry with forced navigation
+        // CRITICAL: Always use window.location for forced navigation
+        // This bypasses Next.js router and prevents stuck RSC requests
+        // Use a small delay to ensure cleanup completes
         setTimeout(() => {
-          if (!(window as any).__bulkImportActive) {
-            // Use window.location for forced navigation to avoid RSC issues
-            // This ensures a clean navigation without stuck prefetch requests
-            window.location.href = href;
-          } else {
-            // If still active after wait, force navigation anyway
-            window.location.href = href;
-          }
-        }, 200);
+          // Clear flags before navigation
+          (window as any).__bulkImportActive = false;
+          (window as any).__bulkImportJustCompleted = false;
+          
+          // Force full page reload to ensure clean state
+          window.location.href = href;
+        }, 100);
         
         return;
       }

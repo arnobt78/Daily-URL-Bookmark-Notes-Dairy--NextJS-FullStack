@@ -9,6 +9,24 @@ class AbortRegistry {
   private globalFetchControllers: Map<string, AbortController> = new Map();
   private isIntercepting: boolean = false;
   private originalFetch: typeof fetch | null = null;
+  // CRITICAL FIX: Permanent backup of the VERY FIRST original fetch
+  // This ensures we can always restore even if originalFetch gets overwritten
+  private permanentOriginalFetch: typeof fetch | null = null;
+  // NATIVE BACKUP: Capture true browser fetch at construction (never mutated)
+  private nativeFetchBackup: typeof fetch | null =
+    typeof window !== "undefined" ? window.fetch.bind(window) : null;
+
+  constructor() {
+    // Just emit a debug log (additive) so we know native fetch was captured
+    if (
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV === "development"
+    ) {
+      console.debug(
+        "💾 [ABORT_REGISTRY] Captured native fetch backup at construction"
+      );
+    }
+  }
 
   /**
    * Register an AbortController to track
@@ -42,6 +60,7 @@ class AbortRegistry {
   /**
    * Start intercepting ALL fetch calls globally (including Next.js internal RSC requests)
    * CRITICAL: This allows us to abort even Next.js router requests
+   * NOTE: Only intercepts when __bulkImportActive is true to avoid interfering with normal navigation
    */
   startGlobalInterception(): void {
     if (typeof window === "undefined" || this.isIntercepting) {
@@ -51,15 +70,67 @@ class AbortRegistry {
     // Store original fetch
     this.originalFetch = window.fetch;
 
+    // ADDITIVE: If originalFetch already appears to be our wrapper, fall back to permanent or native backup
+    try {
+      const currentStr = this.originalFetch.toString();
+      if (
+        currentStr.includes("__bulkImportActive") ||
+        currentStr.includes("globalFetchControllers")
+      ) {
+        if (this.permanentOriginalFetch) {
+          this.originalFetch = this.permanentOriginalFetch;
+          if (process.env.NODE_ENV === "development") {
+            console.debug(
+              "🔁 [ABORT_REGISTRY] Detected recursive wrapper; using permanentOriginalFetch"
+            );
+          }
+        } else if (this.nativeFetchBackup) {
+          this.originalFetch = this.nativeFetchBackup;
+          if (process.env.NODE_ENV === "development") {
+            console.debug(
+              "🔁 [ABORT_REGISTRY] Detected recursive wrapper; using nativeFetchBackup"
+            );
+          }
+        }
+      }
+    } catch {}
+
+    // CRITICAL FIX: Store permanent backup on FIRST interception only
+    if (!this.permanentOriginalFetch) {
+      this.permanentOriginalFetch = window.fetch;
+      if (process.env.NODE_ENV === "development") {
+        console.debug(
+          `🔒 [ABORT_REGISTRY] Stored permanent backup of original fetch`
+        );
+      }
+    }
+
     // Intercept fetch to track ALL requests (including Next.js RSC)
     const self = this;
     window.fetch = function (
       input: RequestInfo | URL,
       init?: RequestInit
     ): Promise<Response> {
-      // CRITICAL: Intercept ALL requests when interception is active
-      // This includes requests that happen during cleanup or just after import
-      // We'll abort them if needed in abortAll()
+      // BYPASS FLAG: Explicit hard disable of interception (additive safeguard)
+      if (
+        typeof window !== "undefined" &&
+        (window as any).__bulkImportDisableInterception
+      ) {
+        return (self.originalFetch || self.nativeFetchBackup || fetch).call(
+          window,
+          input,
+          init
+        );
+      }
+      // CRITICAL: Only intercept if bulk import is active
+      // This prevents interference with normal navigation after import completes
+      if (
+        typeof window !== "undefined" &&
+        !(window as any).__bulkImportActive
+      ) {
+        // Import completed, use original fetch without interception
+        return self.originalFetch!.call(window, input, init);
+      }
 
       // Create a controller for this fetch
       const controller = new AbortController();
@@ -122,21 +193,102 @@ class AbortRegistry {
    * Stop intercepting fetch calls
    */
   stopGlobalInterception(): void {
-    if (
-      typeof window === "undefined" ||
-      !this.isIntercepting ||
-      !this.originalFetch
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
 
-    // Restore original fetch
-    window.fetch = this.originalFetch;
-    this.originalFetch = null;
+    // CRITICAL FIX: Check if window.fetch is currently wrapped BEFORE attempting restoration
+    const fetchStr = window.fetch.toString();
+    const isCurrentlyWrapped =
+      fetchStr.includes("__bulkImportActive") ||
+      fetchStr.includes("globalFetchControllers");
+
+    // Try to restore from primary reference first, then permanent backup
+    let restored = false;
+
+    if (this.originalFetch) {
+      window.fetch = this.originalFetch;
+      restored = true;
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug(
+          `🔍 [ABORT_REGISTRY] Restored original window.fetch from primary reference`
+        );
+      }
+    } else if (this.permanentOriginalFetch) {
+      // Fallback to permanent backup
+      window.fetch = this.permanentOriginalFetch;
+      this.originalFetch = this.permanentOriginalFetch; // Restore primary reference too
+      restored = true;
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug(
+          `🔍 [ABORT_REGISTRY] Restored original window.fetch from PERMANENT BACKUP`
+        );
+      }
+    } else if (isCurrentlyWrapped) {
+      // CRITICAL: If fetch is wrapped but we don't have ANY reference,
+      // this is a critical bug
+      if (process.env.NODE_ENV === "development") {
+        console.error(
+          "❌ [ABORT_REGISTRY] CRITICAL: window.fetch is wrapped but NO originalFetch reference exists!"
+        );
+        console.error(
+          "❌ [ABORT_REGISTRY] Fetch interception will remain active - navigation will be blocked"
+        );
+      }
+    }
+
     this.isIntercepting = false;
 
-    if (process.env.NODE_ENV === "development") {
-      console.debug(`🔍 [ABORT_REGISTRY] Stopped global fetch interception`);
+    // Verify restoration
+    if (process.env.NODE_ENV === "development" && restored) {
+      const newFetchStr = window.fetch.toString();
+      const stillWrapped =
+        newFetchStr.includes("__bulkImportActive") ||
+        newFetchStr.includes("globalFetchControllers");
+
+      if (stillWrapped) {
+        console.error(
+          "❌ [ABORT_REGISTRY] CRITICAL: window.fetch is STILL wrapped after restoration attempt!"
+        );
+        // NUCLEAR FALLBACK: Force native restoration if we still have a backup
+        if (this.nativeFetchBackup) {
+          window.fetch = this.nativeFetchBackup;
+          this.originalFetch = this.nativeFetchBackup;
+          if (process.env.NODE_ENV === "development") {
+            const nativeStr = window.fetch.toString();
+            const nativeWrapped =
+              nativeStr.includes("__bulkImportActive") ||
+              nativeStr.includes("globalFetchControllers");
+            if (!nativeWrapped) {
+              console.debug(
+                "✅ [ABORT_REGISTRY] Nuclear native fetch restoration applied successfully"
+              );
+            } else {
+              console.error(
+                "❌ [ABORT_REGISTRY] Nuclear native restoration failed – fetch still appears wrapped"
+              );
+            }
+          }
+        }
+      } else {
+        console.debug(
+          `✅ [ABORT_REGISTRY] Verified window.fetch is restored (no wrapper detected)`
+        );
+      }
+    }
+  }
+
+  // ADDITIVE: Explicit public nuclear method (never called before) to hard restore
+  forceRestoreNativeFetch(): void {
+    if (typeof window === "undefined") return;
+    if (this.nativeFetchBackup) {
+      window.fetch = this.nativeFetchBackup;
+      this.originalFetch = this.nativeFetchBackup;
+      if (process.env.NODE_ENV === "development") {
+        console.debug("🚨 [ABORT_REGISTRY] forceRestoreNativeFetch() applied");
+      }
     }
   }
 

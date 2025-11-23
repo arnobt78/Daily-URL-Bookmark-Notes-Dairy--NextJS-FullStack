@@ -80,8 +80,8 @@ export default function ListPageClient() {
                     Array.isArray(preservedOrder) &&
                     preservedOrder.length > 0
                   ) {
-                    // Restore to store immediately before getList runs
-                    flushSync(() => {
+                    // Restore to store (use queueMicrotask to avoid flushSync warning)
+                    queueMicrotask(() => {
                       currentList.set({
                         ...currentStoreData,
                         urls: preservedOrder,
