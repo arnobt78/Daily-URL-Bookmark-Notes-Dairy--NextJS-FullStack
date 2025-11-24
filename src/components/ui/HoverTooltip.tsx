@@ -44,15 +44,39 @@ export function HoverTooltip({
         let top = 0;
         let left = 0;
 
+        // Estimate tooltip width (approximate based on message length)
+        // Average character width is ~7px, padding is 12px on each side
+        const estimatedTooltipWidth = message.length * 7 + 24;
+        const tooltipHalfWidth = estimatedTooltipWidth / 2;
+        
+        // Get viewport and container dimensions
+        const viewportWidth = window.innerWidth;
+        const padding = 16; // Minimum padding from edges
+        
+        // Find max-w-7xl container if exists (80rem = 1280px)
+        const maxW7xl = 1280;
+        const containerWidth = Math.min(viewportWidth, maxW7xl);
+        const containerLeft = Math.max(0, (viewportWidth - containerWidth) / 2);
+
         switch (position) {
           case "top":
             // Position above the element, centered horizontally
             top = rect.top - 8; // 8px margin (mb-2)
             left = rect.left + rect.width / 2;
+            
+            // Adjust to stay within container bounds
+            const minLeft = containerLeft + padding + tooltipHalfWidth;
+            const maxLeft = containerLeft + containerWidth - padding - tooltipHalfWidth;
+            left = Math.max(minLeft, Math.min(maxLeft, left));
             break;
           case "bottom":
             top = rect.bottom + 8; // 8px margin (mt-2)
             left = rect.left + rect.width / 2;
+            
+            // Adjust to stay within container bounds
+            const minLeftBottom = containerLeft + padding + tooltipHalfWidth;
+            const maxLeftBottom = containerLeft + containerWidth - padding - tooltipHalfWidth;
+            left = Math.max(minLeftBottom, Math.min(maxLeftBottom, left));
             break;
           case "left":
             top = rect.top + rect.height / 2;

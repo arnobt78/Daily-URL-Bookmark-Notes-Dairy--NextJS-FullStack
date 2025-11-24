@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import {
   Upload,
+  Download,
   FileJson,
   FileSpreadsheet,
   FileText,
@@ -42,7 +43,9 @@ export function UrlBulkImportExport({
   const [isExporting, setIsExporting] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [showImportMenu, setShowImportMenu] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const importMenuRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const isImportActiveRef = useRef(false); // Track if import is active (accessible from cleanup)
@@ -58,6 +61,7 @@ export function UrlBulkImportExport({
     }
 
     setIsExporting(type);
+    setShowExportMenu(false);
 
     try {
       if (type === "json") {
@@ -198,15 +202,21 @@ export function UrlBulkImportExport({
       ) {
         setShowImportMenu(false);
       }
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowExportMenu(false);
+      }
     }
 
-    if (showImportMenu) {
+    if (showImportMenu || showExportMenu) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [showImportMenu]);
+  }, [showImportMenu, showExportMenu]);
 
   // Cleanup on unmount - cancel any ongoing imports
   React.useEffect(() => {
@@ -2294,93 +2304,101 @@ export function UrlBulkImportExport({
 
   return (
     <div className="flex flex-row items-center gap-2 flex-wrap flex-shrink-0">
-      {/* Export JSON */}
-      <HoverTooltip message="Export URLs as JSON file" position="top">
-        <button
-          type="button"
-          onClick={() => handleExport("json")}
-          disabled={isExporting !== null || urls.length === 0}
-          className={`
-            relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl
-            transition-all duration-200 shadow-md hover:shadow-lg
-            text-sm font-medium whitespace-nowrap
-            ${
-              isExporting === "json" || urls.length === 0
-                ? "bg-white/5 text-white/40 cursor-not-allowed"
-                : "bg-gradient-to-r from-purple-600/20 to-purple-500/20 hover:from-purple-600/30 hover:to-purple-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200"
-            }
-          `}
+      {/* Export with dropdown menu */}
+      <div className="relative" ref={exportMenuRef}>
+        <HoverTooltip
+          message="Export URLs in various formats"
+          position="top"
+          usePortal
         >
-          {isExporting === "json" ? (
-            <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <FileJson className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">
-            {isExporting === "json" ? "Exporting..." : "Export JSON"}
-          </span>
-        </button>
-      </HoverTooltip>
+          <button
+            type="button"
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={isExporting !== null || urls.length === 0}
+            className={`
+              relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl
+              transition-all duration-200 shadow-md hover:shadow-lg
+              text-sm font-medium whitespace-nowrap
+              ${
+                isExporting !== null || urls.length === 0
+                  ? "bg-white/5 text-white/40 cursor-not-allowed"
+                  : "bg-gradient-to-r from-purple-600/20 to-purple-500/20 hover:from-purple-600/30 hover:to-purple-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200"
+              }
+            `}
+          >
+            {isExporting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                <span className="hidden sm:inline">Exporting...</span>
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+                <ChevronDown className="h-3 w-3" />
+              </>
+            )}
+          </button>
+        </HoverTooltip>
 
-      {/* Export CSV */}
-      <HoverTooltip message="Export URLs as CSV file" position="top">
-        <button
-          type="button"
-          onClick={() => handleExport("csv")}
-          disabled={isExporting !== null || urls.length === 0}
-          className={`
-            relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl
-            transition-all duration-200 shadow-md hover:shadow-lg
-            text-sm font-medium whitespace-nowrap
-            ${
-              isExporting === "csv" || urls.length === 0
-                ? "bg-white/5 text-white/40 cursor-not-allowed"
-                : "bg-gradient-to-r from-emerald-600/20 to-emerald-500/20 hover:from-emerald-600/30 hover:to-emerald-500/30 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200"
-            }
-          `}
-        >
-          {isExporting === "csv" ? (
-            <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <FileSpreadsheet className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">
-            {isExporting === "csv" ? "Exporting..." : "Export CSV"}
-          </span>
-        </button>
-      </HoverTooltip>
-
-      {/* Export Markdown */}
-      <HoverTooltip message="Export URLs as Markdown file" position="top">
-        <button
-          type="button"
-          onClick={() => handleExport("markdown")}
-          disabled={isExporting !== null || urls.length === 0}
-          className={`
-            relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl
-            transition-all duration-200 shadow-md hover:shadow-lg
-            text-sm font-medium whitespace-nowrap
-            ${
-              isExporting === "markdown" || urls.length === 0
-                ? "bg-white/5 text-white/40 cursor-not-allowed"
-                : "bg-gradient-to-r from-indigo-600/20 to-indigo-500/20 hover:from-indigo-600/30 hover:to-indigo-500/30 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200"
-            }
-          `}
-        >
-          {isExporting === "markdown" ? (
-            <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <FileText className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">
-            {isExporting === "markdown" ? "Exporting..." : "Export MD"}
-          </span>
-        </button>
-      </HoverTooltip>
+        {/* Export dropdown menu */}
+        {showExportMenu && !isExporting && (
+          <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  handleExport("json");
+                  setShowExportMenu(false);
+                }}
+                disabled={urls.length === 0}
+                className="w-full block px-4 py-2 text-sm text-white/90 hover:bg-slate-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
+              >
+                <span className="flex items-center gap-2">
+                  <FileJson className="h-4 w-4 text-purple-400" />
+                  <span>Export as JSON</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleExport("csv");
+                  setShowExportMenu(false);
+                }}
+                disabled={urls.length === 0}
+                className="w-full block px-4 py-2 text-sm text-white/90 hover:bg-slate-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
+              >
+                <span className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                  <span>Export as CSV</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleExport("markdown");
+                  setShowExportMenu(false);
+                }}
+                disabled={urls.length === 0}
+                className="w-full block px-4 py-2 text-sm text-white/90 hover:bg-slate-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-indigo-400" />
+                  <span>Export as Markdown</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Import with dropdown menu */}
       <div className="relative" ref={importMenuRef}>
-        <HoverTooltip message="Import URLs from various formats" position="top">
+        <HoverTooltip
+          message="Import URLs from various formats"
+          position="top"
+          usePortal
+        >
           <button
             type="button"
             onClick={() => setShowImportMenu(!showImportMenu)}
@@ -2413,7 +2431,7 @@ export function UrlBulkImportExport({
 
         {/* Import dropdown menu */}
         {showImportMenu && !isImporting && (
-          <div className="absolute top-full left-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+          <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
             <div className="py-1">
               <label className="block px-4 py-2 text-sm text-white/90 hover:bg-slate-700 cursor-pointer">
                 <span className="flex items-center gap-2">
