@@ -741,6 +741,51 @@ export function UrlBulkImportExport({
             onBulkOperationEnd();
           }
 
+          // CRITICAL: Cleanup BEFORE reload to prevent stuck RSC requests
+          // Must clear flags and abort requests before triggering page reload
+          if (typeof window !== "undefined") {
+            // Clear bulk import flag FIRST
+            (window as any).__bulkImportActive = false;
+            (window as any).__bulkImportJustCompleted = false;
+
+            // Force abort ALL requests immediately
+            if (abortRegistry) {
+              cancelPendingGetList();
+              abortRegistry.abortAll();
+              abortRegistry.forceAbortAllGlobal();
+              abortRegistry.stopGlobalInterception();
+
+              if (process.env.NODE_ENV === "development") {
+                console.log(
+                  `🛑 [BULK IMPORT] Cleaned up all requests before reload (${abortRegistry.getCount()} remaining)`
+                );
+              }
+            }
+
+            // Clear Next.js router caches
+            try {
+              const nextRouter = (window as any).__NEXT_DATA__?.router;
+              if (nextRouter?.prefetchCache) {
+                nextRouter.prefetchCache.clear();
+              }
+              const routerInstance = (window as any).__nextRouter;
+              if (routerInstance) {
+                if (routerInstance.isPending !== undefined) {
+                  routerInstance.isPending = false;
+                }
+                if (routerInstance.cache) {
+                  routerInstance.cache.clear?.();
+                }
+              }
+              const nextFetchCache = (window as any).__nextFetchCache;
+              if (nextFetchCache) {
+                nextFetchCache.clear();
+              }
+            } catch (e) {
+              // Ignore errors
+            }
+          }
+
           // CRITICAL: Force page reload to clear server state and prevent connection pool exhaustion
           // The Next.js dev server can't handle the load from bulk import + SSE + metadata fetching
           // A hard reload ensures a clean slate
@@ -750,9 +795,19 @@ export function UrlBulkImportExport({
             );
             // Set flag in sessionStorage to skip metadata fetch after reload
             sessionStorage.setItem("skipMetadataAfterBulkImport", "true");
+
+            // Wait a bit for cleanup to fully propagate, then force reload
             setTimeout(() => {
-              window.location.reload();
-            }, 500);
+              // Force stop interception one more time before reload
+              if (typeof window !== "undefined" && abortRegistry) {
+                abortRegistry.stopGlobalInterception();
+                abortRegistry.forceAbortAllGlobal();
+                (window as any).__bulkImportActive = false;
+                (window as any).__bulkImportDisableInterception = true;
+              }
+              // Use window.location.href for more forceful navigation
+              window.location.href = window.location.href;
+            }, 300);
           }
 
           return; // Exit early - bulk import succeeded
