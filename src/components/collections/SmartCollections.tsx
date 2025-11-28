@@ -135,27 +135,13 @@ export function SmartCollections({ listId, listSlug }: SmartCollectionsProps) {
 
   // Force refresh (clears React Query cache and refetches)
   const refreshCollections = useCallback(async () => {
-    console.log("🔄 [COLLECTIONS] Refresh button clicked", {
-      listSlug,
-      urlCount: list?.urls?.length,
-    });
-
     if (!listSlug || !list?.urls || list.urls.length < 2) {
-      console.log(
-        "⏭️ [COLLECTIONS] Skipping refresh - not enough URLs or missing data"
-      );
       toast({
         title: "Unable to Refresh",
         description: "Not enough URLs to generate collection suggestions",
         variant: "error",
       });
       return;
-    }
-
-    if (process.env.NODE_ENV === "development") {
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔄 [COLLECTIONS] Starting manual refresh...");
-      }
     }
 
     // Store previous suggestions count to show in toast
@@ -399,7 +385,6 @@ export function SmartCollections({ listId, listSlug }: SmartCollectionsProps) {
 
       if (!isExpectedError) {
         // Only show toast for unexpected errors
-        console.error("❌ [COLLECTIONS] Failed to create:", error);
         toast({
           title: "Error",
           description: errorMessage,

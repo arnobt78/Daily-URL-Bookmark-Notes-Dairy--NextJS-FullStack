@@ -145,9 +145,7 @@ export function useRealtimeList(listId: string | null) {
               (window as any).__bulkImportActive
             ) {
               if (process.env.NODE_ENV === "development") {
-                console.debug(
-                  "⏭️ [REALTIME] Skipping list_updated - bulk import in progress"
-                );
+                // Skipping list_updated - bulk import in progress
               }
               return; // Don't dispatch any events during bulk import
             }
@@ -214,7 +212,7 @@ export function useRealtimeList(listId: string | null) {
 
             // UNIFIED APPROACH: Dispatch unified event instead of separate list-updated
             // This will trigger ONE unified API call that returns both list + activities
-            console.log(`🔄 [REALTIME] List updated - dispatching unified-update (action: ${data.action || 'list_updated'})`);
+            // List updated - dispatching unified-update
 
             // Get current list slug and dispatch unified event
             const current = currentList.get();
@@ -235,7 +233,7 @@ export function useRealtimeList(listId: string | null) {
             // This ensures consistency - one API endpoint returns everything needed
             const activityData = data.activity as any;
             const action = activityData?.action || "unknown";
-            console.log(`🔄 [REALTIME] Activity created - dispatching unified-update (action: ${action})`);
+            // Activity created - dispatching unified-update
             
             // Dispatch unified event that will trigger the unified endpoint
             window.dispatchEvent(
@@ -255,7 +253,7 @@ export function useRealtimeList(listId: string | null) {
             );
           }
         } catch (error) {
-          console.error("❌ [REALTIME] Error parsing event:", error);
+          console.error(`❌ [API] SSE event parsing error:`, error);
         }
       };
 
@@ -272,7 +270,7 @@ export function useRealtimeList(listId: string | null) {
 
         // Only log error if not a simple connection interruption during page load
         if (!isConnectionInterrupted || process.env.NODE_ENV === "development") {
-          console.error("❌ [REALTIME] SSE error:", error);
+          console.error(`❌ [API] SSE connection error:`, error);
         }
 
         setIsConnected(false);
@@ -296,7 +294,7 @@ export function useRealtimeList(listId: string | null) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000);
         
         if (process.env.NODE_ENV === "development") {
-          console.log(`🔄 [REALTIME] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})...`);
+          console.log(`🔄 [API] SSE reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
         }
         
         reconnectTimeoutRef.current = setTimeout(() => {

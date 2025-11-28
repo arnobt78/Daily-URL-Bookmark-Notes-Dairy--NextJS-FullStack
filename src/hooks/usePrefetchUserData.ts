@@ -55,10 +55,6 @@ export function usePrefetchUserData() {
           staleTime: 30 * 1000, // 30 seconds
         });
 
-        if (process.env.NODE_ENV === "development") {
-          console.log("✅ [PREFETCH] User lists prefetched successfully");
-        }
-
         // Step 2: Get the prefetched lists data from cache
         const listsData = queryClient.getQueryData<{ lists: Array<{ id: string; slug: string }> }>(
           listQueryKeys.allLists()
@@ -69,9 +65,7 @@ export function usePrefetchUserData() {
           return; // No lists to prefetch
         }
 
-        if (process.env.NODE_ENV === "development") {
-          console.log(`🔄 [PREFETCH] Prefetching unified data for ${lists.length} lists...`);
-        }
+        console.log(`🔄 [API] Prefetching unified data for ${lists.length} lists...`);
 
         // Step 3: Prefetch unified data for ALL lists (list + activities + collaborators)
         // This makes navigating to any list instant - all data is already cached
@@ -135,12 +129,6 @@ export function usePrefetchUserData() {
                   };
                 } catch (error) {
                   // Return empty data on error - not critical for prefetch
-                  if (process.env.NODE_ENV === "development") {
-                    console.debug(
-                      `⏭️ [PREFETCH] Failed to prefetch list ${list.slug}:`,
-                      error
-                    );
-                  }
                   return { list: null, activities: [], collaborators: [] };
                 }
               },
@@ -154,19 +142,9 @@ export function usePrefetchUserData() {
         // Wait for all prefetches to complete (in parallel for speed)
         await Promise.allSettled(prefetchPromises);
 
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `✅ [PREFETCH] Completed prefetching unified data for ${lists.length} lists`
-          );
-          console.log(
-            `📊 [PREFETCH] All user data cached - pages will load instantly!`
-          );
-        }
+        console.log(`✅ [API] Completed prefetching unified data for ${lists.length} lists`);
       } catch (error) {
         // Silently fail prefetch - not critical
-        if (process.env.NODE_ENV === "development") {
-          console.debug("⏭️ [PREFETCH] Failed to prefetch user data:", error);
-        }
       }
     };
 

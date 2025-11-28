@@ -119,14 +119,8 @@ export function PermissionManager({
       );
       
       if (!cachedAfterDelay && !unifiedDataReceivedRef.current) {
-        if (process.env.NODE_ENV === "development") {
-          console.log(`⚠️ [PERMISSIONS] Unified endpoint didn't provide data after 1500ms, enabling separate fetch`);
-        }
         setShouldFetch(true);
       } else if (cachedAfterDelay) {
-        if (process.env.NODE_ENV === "development") {
-          console.log(`✅ [PERMISSIONS] Found cached collaborators after delay: ${cachedAfterDelay.collaborators?.length || 0} collaborators, separate fetch disabled`);
-        }
         unifiedDataReceivedRef.current = true;
       }
     }, 1500); // Increased delay to 1500ms to allow unified endpoint to complete
@@ -153,10 +147,7 @@ export function PermissionManager({
       const eventListId = customEvent.detail?.listId;
       const eventCollaborators = customEvent.detail?.collaborators;
       
-      console.log(`📥 [PERMISSIONS] Received unified-collaborators-updated event - eventListId: ${eventListId}, componentListId: ${listId}, matches: ${eventListId === listId}, isArray: ${Array.isArray(eventCollaborators)}`);
-      
       if (eventListId === listId && Array.isArray(eventCollaborators)) {
-        console.log(`✅ [PERMISSIONS] Processing unified collaborators: ${eventCollaborators.length} collaborators`);
         
         // Mark that unified endpoint provided data (prevent separate fetch)
         unifiedDataReceivedRef.current = true;
@@ -188,14 +179,6 @@ export function PermissionManager({
           listQueryKeys.collaborators(listId),
           { collaborators: uniqueCollaborators }
         );
-        
-        if (process.env.NODE_ENV === "development") {
-          console.log(`✅ [PERMISSIONS] Cache updated with ${eventCollaborators.length} collaborators, separate fetch disabled`);
-        }
-      } else {
-        if (process.env.NODE_ENV === "development") {
-          console.log(`⏭️ [PERMISSIONS] Ignoring event - listId mismatch or invalid collaborators data`);
-        }
       }
     };
     
@@ -222,9 +205,6 @@ export function PermissionManager({
         customEvent.detail?.listId === listId &&
         customEvent.detail?.action === "collaborator_role_updated"
       ) {
-        console.log(
-          "🔄 [PERMISSIONS] Role updated (from list-updated) - refreshing collaborators and permissions"
-        );
         // Invalidate collaborators query to refetch with new roles
         queryClient.invalidateQueries({
           queryKey: listQueryKeys.collaborators(listId),
@@ -245,9 +225,6 @@ export function PermissionManager({
         customEvent.detail?.action === "collaborator_role_updated"
       ) {
         if (process.env.NODE_ENV === "development") {
-          console.log(
-            "🔄 [PERMISSIONS] Role updated (from unified-update) - refreshing collaborators and permissions"
-          );
         }
         // Invalidate collaborators query to refetch with new roles
         queryClient.invalidateQueries({
@@ -406,7 +383,6 @@ export function PermissionManager({
       if (!isExpectedError) {
         // Only show toast for unexpected errors
         // Show error toast (optimistic update already rolled back above)
-        console.error("Failed to update role:", error);
         toast({
           title: "Error",
           description:
@@ -417,9 +393,6 @@ export function PermissionManager({
         });
         // Re-open dialog on error so user can retry
         setRoleChangeDialog({ open: true, email: emailToUpdate, currentRole: newRole });
-      } else if (process.env.NODE_ENV === "development") {
-        // Silently handle expected errors (no console spam)
-        console.debug("⏭️ [PERMISSIONS] Update role request aborted (expected during page refresh)");
       }
     } finally {
     }
@@ -533,7 +506,6 @@ export function PermissionManager({
       if (!isExpectedError) {
         // Only show toast for unexpected errors
         // Show error toast (optimistic update already rolled back above)
-        console.error("Failed to remove collaborator:", error);
         toast({
           title: "Error",
           description:
@@ -544,9 +516,6 @@ export function PermissionManager({
         });
         // Re-open dialog on error so user can retry
         setDeleteDialog({ open: true, email: emailToDelete });
-      } else if (process.env.NODE_ENV === "development") {
-        // Silently handle expected errors (no console spam)
-        console.debug("⏭️ [PERMISSIONS] Remove collaborator request aborted (expected during page refresh)");
       }
     } finally {
       // Mutation handles loading state

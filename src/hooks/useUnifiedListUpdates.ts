@@ -72,9 +72,6 @@ export function useUnifiedListUpdates(listId: string) {
       // CRITICAL: Synchronous check - no await here! Check for existing promise first
       const existingFetch = activeFetches.get(fetchKey);
       if (existingFetch) {
-        if (process.env.NODE_ENV === "development") {
-          console.log(`♻️ [UNIFIED] Reusing existing fetch for ${slug} (limit: ${activityLimit})`);
-        }
         return existingFetch;
       }
 
@@ -85,9 +82,6 @@ export function useUnifiedListUpdates(listId: string) {
         while (attempts < 50) { // 50 * 2ms = 100ms max wait
           const waitingFetch = activeFetches.get(fetchKey);
           if (waitingFetch) {
-            if (process.env.NODE_ENV === "development") {
-              console.log(`♻️ [UNIFIED] Found fetch created by another component for ${slug} (limit: ${activityLimit})`);
-            }
             return waitingFetch;
           }
           // Small synchronous delay (simulate with Promise.resolve().then() pattern)
@@ -107,7 +101,7 @@ export function useUnifiedListUpdates(listId: string) {
       // Create the actual fetch promise
       const fetchPromise = (async () => {
         try {
-          console.log(`🔄 [UNIFIED] Starting new fetch for ${slug} (limit: ${activityLimit})...`);
+          console.log(`🔄 [API] GET /api/lists/${slug}/updates?activityLimit=${activityLimit}`);
           const response = await fetch(
             `/api/lists/${slug}/updates?activityLimit=${activityLimit}`
           );
@@ -131,9 +125,7 @@ export function useUnifiedListUpdates(listId: string) {
           }
 
           const data: UnifiedUpdateResponse = await response.json();
-          if (process.env.NODE_ENV === "development") {
-            console.log(`✅ [UNIFIED] Fetched list + ${data.activities.length} activities${data.collaborators ? ` + ${data.collaborators.length} collaborators` : ''}`);
-          }
+          console.log(`✅ [API] GET /api/lists/${slug}/updates - ${data.activities.length} activities${data.collaborators ? `, ${data.collaborators.length} collaborators` : ''}`);
 
           // Update list store
           if (data.list) {
@@ -157,9 +149,6 @@ export function useUnifiedListUpdates(listId: string) {
           // This prevents PermissionManager from making a separate API call
           // Empty array [] is still valid data - it means "no collaborators"
           const collaboratorsData = data.collaborators || [];
-            if (process.env.NODE_ENV === "development") {
-              console.log(`📤 [UNIFIED] Dispatching unified-collaborators-updated event for listId: ${actualListId}, collaborators: ${collaboratorsData.length}`);
-            }
           
           // CRITICAL: Populate React Query cache DIRECTLY so PermissionManager finds it even if component isn't mounted yet
           // This ensures cache is available immediately when PermissionManager checks on mount (before 1500ms delay expires)
@@ -167,9 +156,6 @@ export function useUnifiedListUpdates(listId: string) {
             listQueryKeys.collaborators(actualListId),
             { collaborators: collaboratorsData }
           );
-            if (process.env.NODE_ENV === "development") {
-              console.log(`💾 [UNIFIED] Populated React Query cache for listId: ${actualListId} with ${collaboratorsData.length} collaborators`);
-            }
           
           // Dispatch event for PermissionManager component listener (catches it if already mounted)
           window.dispatchEvent(
@@ -201,10 +187,7 @@ export function useUnifiedListUpdates(listId: string) {
           
           if (!isExpectedError) {
             // Only log unexpected errors
-            console.error("❌ [UNIFIED] Failed to fetch updates:", error);
-          } else if (process.env.NODE_ENV === "development") {
-            // Silently handle expected errors (no console spam)
-            console.debug("⏭️ [UNIFIED] Fetch aborted (expected during page refresh/bulk import)");
+            console.error(`❌ [API] GET /api/lists/${slug}/updates failed:`, error);
           }
           return { list: null, activities: [], collaborators: [] };
         } finally {
