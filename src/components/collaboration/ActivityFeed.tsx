@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { useStore } from "@nanostores/react";
 import { currentList } from "@/stores/urlListStore";
-import { useUnifiedListUpdates } from "@/hooks/useUnifiedListUpdates";
 import {
   Activity,
   MessageSquare,
@@ -40,7 +39,6 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const list = useStore(currentList);
-  const { fetchUnifiedUpdates } = useUnifiedListUpdates(listId);
 
   // Track last fetch start time to prevent excessive calls
   const lastFetchStartRef = React.useRef<number>(0);
@@ -125,7 +123,7 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
         if (activitiesAfterWait === 0) {
           // Still no activities - might be edge case, fetch manually
           hasInitialFetchedRef.current = fetchKey;
-          fetchUnifiedUpdates(current.slug, limit);
+          fetchActivities();
         } else {
           // Activities were populated by event - mark as fetched
           hasInitialFetchedRef.current = fetchKey;
@@ -141,7 +139,7 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [listId, limit, activities.length, fetchActivities, fetchUnifiedUpdates]);
+  }, [listId, limit, activities.length, fetchActivities]);
 
   // Listen for unified-update events (UNIFIED APPROACH: One event, one API call)
   useEffect(() => {
@@ -156,7 +154,6 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
         return;
       }
       
-      console.log(`📨 [ACTIVITIES] Received unified activities update: ${customEvent.detail.activities.length} activities`);
       setActivities(customEvent.detail.activities || []);
     };
     
@@ -316,7 +313,7 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
         clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, [listId, limit, fetchActivities, fetchUnifiedUpdates]);
+  }, [listId, limit, fetchActivities]);
 
   // Get action icon
   const getActionIcon = (action: string) => {

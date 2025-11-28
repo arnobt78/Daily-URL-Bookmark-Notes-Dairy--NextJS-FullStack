@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useUrlMetadata } from "@/hooks/useUrlMetadata";
 import { useQueryClient } from "@tanstack/react-query";
+import { listQueryKeys } from "@/hooks/useListQueries";
 import { fetchUrlMetadata, type UrlMetadata } from "@/utils/urlMetadata";
 import { UrlCard } from "./UrlCard";
 import { UrlEditModal } from "./UrlEditModal";
@@ -182,7 +183,7 @@ export function UrlList() {
   useEffect(() => {
     const handleMetadataRefresh = () => {
       // Invalidate all metadata queries to force re-fetch with improved extractor
-      queryClient.invalidateQueries({ queryKey: ["url-metadata"] });
+      queryClient.invalidateQueries({ queryKey: ["url-metadata"], exact: false });
       // Also clear localStorage cache for metadata
       if (typeof window !== "undefined" && window.localStorage) {
         const keys = Object.keys(window.localStorage);
@@ -203,7 +204,7 @@ export function UrlList() {
       const { url, metadata } = customEvent.detail;
       if (url && metadata) {
         // Populate React Query cache immediately so cards don't fetch
-        const queryKey = ["url-metadata", url] as const;
+        const queryKey = listQueryKeys.urlMetadata(url);
         queryClient.setQueryData(queryKey, metadata);
         // console.log(
         //   `✅ [POST] Populated React Query cache for: ${url.slice(0, 40)}...`
@@ -407,7 +408,7 @@ export function UrlList() {
     if (batchFetchCompleteRef.current === prefetchKey) {
       // Use same uniqueUrls array we computed above for consistency
       const allCached = uniqueUrls.every((url) => {
-        const queryKey = ["url-metadata", url] as const;
+        const queryKey = listQueryKeys.urlMetadata(url);
         return !!queryClient.getQueryData<UrlMetadata>(queryKey);
       });
       if (allCached) {
@@ -454,7 +455,7 @@ export function UrlList() {
           // Also prefetch images so they display instantly (no loading state on reorder)
           let hydratedCount = 0;
           Object.entries(metadata).forEach(([url, metaData]) => {
-            const queryKey = ["url-metadata", url] as const;
+            const queryKey = listQueryKeys.urlMetadata(url);
             const meta = metaData as UrlMetadata;
 
             // Check if already in cache
@@ -556,7 +557,7 @@ export function UrlList() {
 
         // Load from localStorage first (instant)
         uniqueUrls.forEach((url) => {
-          const queryKey = ["url-metadata", url] as const;
+          const queryKey = listQueryKeys.urlMetadata(url);
           const localStorageKey = `react-query:${queryKey.join(":")}`;
           try {
             const item = localStorage.getItem(localStorageKey);
@@ -574,7 +575,7 @@ export function UrlList() {
 
         // Prefetch missing ones individually (fallback only)
         const urlsToFetch = uniqueUrls.filter((url) => {
-          const queryKey = ["url-metadata", url] as const;
+          const queryKey = listQueryKeys.urlMetadata(url);
           return !queryClient.getQueryData(queryKey);
         });
 
@@ -1168,7 +1169,7 @@ export function UrlList() {
       let existingMetadata: UrlMetadata | undefined;
       if (urlChanged && url) {
         try {
-          const queryKey = ["url-metadata", url] as const;
+          const queryKey = listQueryKeys.urlMetadata(url);
           existingMetadata = queryClient.getQueryData<UrlMetadata>(queryKey);
           if (existingMetadata) {
             // console.log(
@@ -1199,7 +1200,7 @@ export function UrlList() {
       // Clean up old cache entry if URL changed (PATCH already populated new one)
       if (urlChanged && currentUrl) {
         queryClient.removeQueries({
-          queryKey: ["url-metadata", currentUrl.url],
+          queryKey: listQueryKeys.urlMetadata(currentUrl.url),
         });
       }
 
@@ -2659,7 +2660,7 @@ export function UrlList() {
                       );
                       if (deletedUrl) {
                         queryClient.removeQueries({
-                          queryKey: ["url-metadata", deletedUrl.url],
+                          queryKey: listQueryKeys.urlMetadata(deletedUrl.url),
                         });
                       }
                     }
