@@ -94,14 +94,11 @@ export default function Auth() {
         
         // Check if there's a redirect URL (user was trying to access a protected resource)
         const redirectUrl = getRedirectUrl();
-        if (redirectUrl) {
+        if (redirectUrl && typeof window !== "undefined") {
           // Redirect to the original destination after successful signup
           setTimeout(() => {
             window.location.href = redirectUrl;
           }, 1500);
-        } else {
-          // No redirect - just reload the page
-          setTimeout(() => window.location.reload(), 1500);
         }
       }
     } catch {
@@ -156,14 +153,11 @@ export default function Auth() {
         
         // Check if there's a redirect URL (user was trying to access a protected resource)
         const redirectUrl = getRedirectUrl();
-        if (redirectUrl) {
+        if (redirectUrl && typeof window !== "undefined") {
           // Redirect to the original destination after successful login
           setTimeout(() => {
             window.location.href = redirectUrl;
           }, 1000);
-        } else {
-          // No redirect - just reload the page
-          setTimeout(() => window.location.reload(), 1000);
         }
       }
     } catch {

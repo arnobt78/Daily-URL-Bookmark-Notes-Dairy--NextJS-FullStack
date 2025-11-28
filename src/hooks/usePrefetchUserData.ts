@@ -65,8 +65,6 @@ export function usePrefetchUserData() {
           return; // No lists to prefetch
         }
 
-        console.log(`🔄 [API] Prefetching unified data for ${lists.length} lists...`);
-
         // Step 3: Prefetch unified data for ALL lists (list + activities + collaborators)
         // This makes navigating to any list instant - all data is already cached
         const prefetchPromises = lists.map((list) => {
@@ -141,27 +139,15 @@ export function usePrefetchUserData() {
 
         // Wait for all prefetches to complete (in parallel for speed)
         await Promise.allSettled(prefetchPromises);
-
-        console.log(`✅ [API] Completed prefetching unified data for ${lists.length} lists`);
       } catch (error) {
         // Silently fail prefetch - not critical
       }
     };
 
     // Prefetch immediately when user is authenticated
+    // REMOVED: Aggressive interval prefetching - it was causing duplicate API calls
+    // React Query's cache and SSE events are sufficient for keeping data fresh
     prefetchAllUserData();
-
-    // Also set up interval to keep data fresh (every 2 minutes)
-    // Less frequent than before to reduce unnecessary API calls when user is inactive
-    const interval = setInterval(() => {
-      if (isAuthenticated) {
-        prefetchAllUserData();
-      }
-    }, 2 * 60 * 1000); // 2 minutes instead of 60 seconds
-
-    return () => {
-      clearInterval(interval);
-    };
   }, [isAuthenticated, user?.id, queryClient]);
 }
 

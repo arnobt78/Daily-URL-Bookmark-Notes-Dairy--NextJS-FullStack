@@ -69,71 +69,18 @@ export function PermissionManager({
   const updateRoleMutation = useUpdateCollaboratorRole(listId, listSlug);
   const removeCollaboratorMutation = useRemoveCollaborator(listId, listSlug);
 
-  // Track if unified endpoint has provided collaborators (to avoid redundant fetch)
-  const unifiedDataReceivedRef = useRef<boolean>(false);
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Track if we should fetch collaborators separately (fallback if unified endpoint doesn't populate cache)
-  const [shouldFetch, setShouldFetch] = useState(false);
-  
-  // Fetch collaborators with React Query
-  // Unified query populates cache automatically - we just read from it
-  // Only fetch separately if unified endpoint didn't provide data after delay
-  const {
-    data: collaboratorsData,
-    isLoading,
-    refetch: refetchCollaborators,
-  } = useQuery({
-    queryKey: listQueryKeys.collaborators(listId),
-    queryFn: async () => {
-      const response = await fetch(`/api/lists/${listSlug}/updates?activityLimit=30`);
-      if (!response.ok) return { collaborators: [] };
-      const data = await response.json();
-      return { collaborators: data.collaborators || [] };
-    },
-    enabled: shouldFetch && !!listSlug, // Only fetch if needed and slug is available
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-  });
-  
-  // Check cache immediately (runs once per listId)
-  useEffect(() => {
-    // Reset flag when listId changes
-    unifiedDataReceivedRef.current = false;
-    
-    // Wait for unified endpoint to populate cache
+  // Read collaborators directly from React Query cache (populated by unified endpoint)
+  // Unified endpoint populates cache automatically, SSE events handle real-time updates
+  const collaborators = (() => {
     const cached = queryClient.getQueryData<{ collaborators: Array<{ email: string; role: string }> }>(
       listQueryKeys.collaborators(listId)
     );
-    
-    if (cached && cached.collaborators) {
-      // Cache already populated by unified endpoint
-      unifiedDataReceivedRef.current = true;
-      return;
-    }
-    
-    // Wait 1500ms to allow unified endpoint to complete, then check again
-    fetchTimeoutRef.current = setTimeout(() => {
-      const cachedAfterDelay = queryClient.getQueryData<{ collaborators: Array<{ email: string; role: string }> }>(
-        listQueryKeys.collaborators(listId)
-      );
-      
-      if (!cachedAfterDelay && !unifiedDataReceivedRef.current) {
-        setShouldFetch(true);
-      } else if (cachedAfterDelay) {
-        unifiedDataReceivedRef.current = true;
-      }
-    }, 1500); // Increased delay to 1500ms to allow unified endpoint to complete
-    
-    return () => {
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-      }
-    };
-  }, [listId, queryClient, shouldFetch, listSlug]);
+    return cached?.collaborators || [];
+  })();
+  
+  const isLoading = false; // No separate loading state needed - unified query handles it
 
-  // Listen for collaborators from unified endpoint (preferred - no separate API call)
-  // Set up listener IMMEDIATELY to catch events that fire before component fully mounts
+  // Listen for collaborators from unified endpoint (real-time updates via SSE)
   useEffect(() => {
     const handleUnifiedCollaborators = (event: Event) => {
       const customEvent = event as CustomEvent<{
@@ -141,31 +88,14 @@ export function PermissionManager({
         collaborators: Collaborator[];
       }>;
       
-      // Handle event if it's for this list (even if collaborators is empty array)
-      // Empty array is valid data - it means "no collaborators"
-      // Use Array.isArray to handle both empty arrays and populated arrays
       const eventListId = customEvent.detail?.listId;
       const eventCollaborators = customEvent.detail?.collaborators;
       
       if (eventListId === listId && Array.isArray(eventCollaborators)) {
-        
-        // Mark that unified endpoint provided data (prevent separate fetch)
-        unifiedDataReceivedRef.current = true;
-        setShouldFetch(false); // Disable separate fetch since unified endpoint provided data
-        
-        // Clear the timeout to prevent separate fetch
-        if (fetchTimeoutRef.current) {
-          clearTimeout(fetchTimeoutRef.current);
-          fetchTimeoutRef.current = null;
-        }
-        
-        // Update React Query cache with unified collaborators (bypasses separate fetch)
-        // Deduplicate collaborators by email (case-insensitive) to prevent duplicate keys
-        // Even if empty array, this prevents the separate API call
+        // Deduplicate collaborators by email (case-insensitive)
         const uniqueCollaborators = eventCollaborators.reduce<Collaborator[]>(
           (acc, collaborator) => {
             const emailLower = collaborator.email.toLowerCase();
-            // Check if we already have this collaborator (case-insensitive)
             const exists = acc.some((c) => c.email.toLowerCase() === emailLower);
             if (!exists) {
               acc.push(collaborator);
@@ -182,7 +112,6 @@ export function PermissionManager({
       }
     };
     
-    // Add listener IMMEDIATELY (before delay timeout) to catch events that fire quickly
     window.addEventListener("unified-collaborators-updated", handleUnifiedCollaborators);
     
     return () => {
@@ -190,7 +119,7 @@ export function PermissionManager({
     };
   }, [listId, queryClient]);
 
-  const collaborators = collaboratorsData?.collaborators || [];
+  // Collaborators are read directly from React Query cache (populated by unified endpoint)
 
   // Listen for real-time role updates to refresh collaborators list and permissions
   useEffect(() => {

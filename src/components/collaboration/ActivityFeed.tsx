@@ -40,106 +40,15 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
   const [isLoading, setIsLoading] = useState(false);
   const list = useStore(currentList);
 
-  // Track last fetch start time to prevent excessive calls
-  const lastFetchStartRef = React.useRef<number>(0);
-  // Track if a fetch is currently in progress
-  const isFetchingRef = React.useRef<boolean>(false);
   // Track refresh timeout to debounce rapid updates
   const refreshTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   // Track last local operation time to skip fetches after local actions
   const lastLocalOperationRef = React.useRef<number>(0);
-  // Track pending activity-updated events to coalesce duplicates (local + SSE)
-  const pendingActivityUpdateRef = React.useRef<boolean>(false);
   // Track last activity-updated event timestamp to deduplicate rapid events
   const lastActivityUpdateEventRef = React.useRef<number>(0);
 
-  // Fetch activities
-  const fetchActivities = React.useCallback(async () => {
-    const now = Date.now();
-
-    // Atomic check: Prevent duplicate fetches if one is already in progress
-    // CRITICAL: Only prevent if actively fetching, not based on time (event handler already debounces)
-    if (isFetchingRef.current) {
-      // Fetch already in progress, skipping...
-      return;
-    }
-
-    // Note: Removed time-based debounce here - event handler already handles debouncing
-    // This ensures queued events from handleActivityUpdate always execute
-
-    // Mark as fetching and update last fetch start time BEFORE starting (atomic operation)
-    isFetchingRef.current = true;
-    lastFetchStartRef.current = now;
-
-      setIsLoading(true);
-    try {
-      const response = await fetch(
-        `/api/lists/${listId}/activities?limit=${limit}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setActivities(data.activities || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch activities:", error);
-    } finally {
-      setIsLoading(false);
-      // Clear fetching flag and pending flag after completion
-      setTimeout(() => {
-        isFetchingRef.current = false;
-        pendingActivityUpdateRef.current = false; // Clear pending flag after fetch completes
-      }, 100); // 100ms delay to prevent immediate re-trigger
-    }
-  }, [listId, limit]);
-
-  const hasInitialFetchedRef = React.useRef<string | null>(null);
-
-  useEffect(() => {
-    // OPTIMIZATION: ActivityFeed should NOT fetch on mount if ListPage is handling it
-    // ListPage fetches unified data on mount, which dispatches unified-activities-updated event
-    // ActivityFeed listens to this event, so it should wait for it instead of fetching separately
-    
-    const fetchKey = `${listId}-${limit}`;
-    if (hasInitialFetchedRef.current === fetchKey) {
-      return; // Already fetched
-    }
-
-    // If activities are already populated (from event listener), don't fetch
-    if (activities.length > 0) {
-      hasInitialFetchedRef.current = fetchKey;
-      return; // Activities already loaded via event
-    }
-
-    // Wait longer (2 seconds) to see if we receive unified-activities-updated event
-    // ListPage fetches on mount and dispatches event - we should receive it
-    // Only fetch manually if no event received after 2 seconds (handles edge cases)
-    const timeoutId = setTimeout(() => {
-      // After timeout, check again if activities were set by event
-      // Only fetch if still empty and ListPage hasn't provided data
-      const current = currentList.get();
-      if (current?.slug && current.id === listId) {
-        // Check if activities were populated by event listener
-        const activitiesAfterWait = activities.length;
-        if (activitiesAfterWait === 0) {
-          // Still no activities - might be edge case, fetch manually
-          hasInitialFetchedRef.current = fetchKey;
-          fetchActivities();
-        } else {
-          // Activities were populated by event - mark as fetched
-          hasInitialFetchedRef.current = fetchKey;
-        }
-      } else if (!current?.slug || current.id !== listId) {
-        // Fallback to old endpoint if slug not available yet
-        lastFetchStartRef.current = 0;
-        fetchActivities();
-      }
-    }, 2000); // Wait 2 seconds for ListPage's fetch to complete and dispatch event
-
-    // Clear timeout if component unmounts
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [listId, limit, activities.length, fetchActivities]);
+  // ActivityFeed now relies ONLY on events from unified endpoint
+  // No separate API calls - ListPage's useUnifiedListQuery handles all fetching
 
   // Listen for unified-update events (UNIFIED APPROACH: One event, one API call)
   useEffect(() => {
@@ -220,50 +129,9 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
         });
       }
 
-      // Skip if fetch is already in progress (queue it instead)
-      if (isFetchingRef.current) {
-        // Clear any existing timeout and set a new one
-        if (refreshTimeoutRef.current) {
-          clearTimeout(refreshTimeoutRef.current);
-        }
-        // CRITICAL: Always queue - ensure fetch happens after current one completes
-        refreshTimeoutRef.current = setTimeout(() => {
-          if (!isFetchingRef.current) {
-            fetchActivities();
-          }
-        }, 200); // Shorter delay to ensure quick refresh
-        return;
-      }
-
-      // CRITICAL: Reduced debounce window and always ensure fetch happens
-      // Only debounce if we literally just fetched (within 200ms) to prevent true duplicates
-      const timeSinceLastFetch = now - lastFetchStartRef.current;
-      const debounceWindow = 200; // Reduced from 400ms - only prevent immediate duplicates
-      
-      if (timeSinceLastFetch < debounceWindow) {
-        // Clear any existing timeout and set a new one (coalesce multiple rapid events)
-        if (refreshTimeoutRef.current) {
-          clearTimeout(refreshTimeoutRef.current);
-        }
-        
-        // CRITICAL: Always queue the fetch - ensure it happens even after very recent fetch
-        const queueDelay = Math.max(50, debounceWindow - timeSinceLastFetch + 100); // Minimum 50ms, buffer 100ms
-        refreshTimeoutRef.current = setTimeout(() => {
-          // Always fetch if ready
-          if (!isFetchingRef.current) {
-            fetchActivities();
-          }
-        }, queueDelay);
-        return;
-      }
-
-      // Clear any pending refresh
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-
-      // Fetch immediately - enough time has passed since last fetch
-      fetchActivities();
+      // Activity-updated events trigger ListPage to refetch unified data via SSE
+      // ListPage then dispatches unified-activities-updated, which we listen to
+      // No separate fetch needed - unified endpoint handles everything
     };
 
     // Listen to activity-updated events (for real-time updates)
@@ -313,7 +181,7 @@ export function ActivityFeed({ listId, limit = 50 }: ActivityFeedProps) {
         clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, [listId, limit, fetchActivities]);
+  }, [listId, limit]);
 
   // Get action icon
   const getActionIcon = (action: string) => {

@@ -251,18 +251,9 @@ export function SmartCollections({ listId, listSlug }: SmartCollectionsProps) {
         processedEventsRef.current = new Set(eventsArray.slice(-50));
       }
 
-      // Mark queries as stale and refetch only if they're actively being used
-      // This prevents duplicate API calls by checking if queries have observers
-      if (showDuplicates && shouldFetchDuplicates) {
-        // Duplicates query is enabled - refetch it
-        queryClient.invalidateQueries({
-          queryKey: listQueryKeys.duplicates(listId),
-        });
-      }
-      // Always mark suggestions as stale - it will refetch when accessed
-      queryClient.invalidateQueries({
-        queryKey: listQueryKeys.collections(listId),
-      });
+      // REMOVED: Automatic invalidations on unified-update events
+      // These were causing duplicate API calls - invalidations happen via mutations only
+      // React Query's staleTime handles background updates, user can manually refresh if needed
     };
 
     const handleUnifiedUpdate = (event: Event) => {

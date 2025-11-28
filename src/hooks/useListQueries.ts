@@ -576,11 +576,11 @@ export function useAllListsQuery() {
       const data = await response.json();
       return { lists: data.lists || [] };
     },
-    staleTime: 30 * 1000, // 30 seconds - data is fresh for 30 seconds
-    gcTime: 5 * 60 * 1000, // 5 minutes - cache kept for 5 minutes
-    refetchOnWindowFocus: true, // Refetch when user returns to tab (stale data is refetched)
+    staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes - cache kept for 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch on tab switch - causes unnecessary API calls
     refetchOnMount: false, // Don't refetch on mount if data is fresh (use cache if available)
-    refetchInterval: false, // Disable automatic refetching - rely on window focus and manual refresh
+    refetchInterval: false, // Disable automatic refetching - SSE events handle updates
     retry: 1,
   });
 }
@@ -668,29 +668,10 @@ export function setupSSECacheSync() {
     
     if (!listId) return;
     
-    // Invalidate relevant queries based on action
-    if (action.includes("url_")) {
-      if (slug) {
-        queryClient.invalidateQueries({ queryKey: listQueryKeys.unified(slug) });
-      }
-      queryClient.invalidateQueries({ queryKey: listQueryKeys.collections(listId) });
-      queryClient.invalidateQueries({ queryKey: listQueryKeys.duplicates(listId) });
-    }
-    
-    if (action.includes("collaborator_")) {
-      queryClient.invalidateQueries({ queryKey: listQueryKeys.collaborators(listId) });
-      if (slug) {
-        queryClient.invalidateQueries({ queryKey: listQueryKeys.unified(slug) });
-      }
-    }
-    
-    // Always invalidate activities
-    queryClient.invalidateQueries({ queryKey: listQueryKeys.activities(listId) });
-    
-    // Invalidate all lists if any list-related action occurs
-    if (action.includes("list_") || action.includes("url_") || action.includes("collaborator_")) {
-      queryClient.invalidateQueries({ queryKey: listQueryKeys.allLists() });
-    }
+    // REMOVED: Aggressive invalidations causing duplicate API calls
+    // React Query's staleTime handles cache freshness
+    // SSE events already trigger unified-update which ListPage handles
+    // Only mutations need explicit invalidations (handled in mutation callbacks)
   };
   
   if (typeof window !== "undefined") {

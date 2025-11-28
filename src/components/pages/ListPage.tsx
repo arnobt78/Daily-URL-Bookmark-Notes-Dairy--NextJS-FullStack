@@ -61,27 +61,25 @@ export default function ListPageClient() {
   const hasRedirectedRef = useRef<boolean>(false); // Track if we've already redirected to prevent duplicate redirects
 
   // Update loading state based on React Query
+  // CRITICAL: Check React Query first (most reliable), then fall back to store
   useEffect(() => {
+    // If React Query has data for this slug, we're done loading
     if (unifiedData?.list && unifiedData.list.slug === listSlug) {
       setIsLoading(false);
-    } else if (isLoadingQuery && listSlug) {
-      setIsLoading(true);
+      return;
     }
-  }, [unifiedData, isLoadingQuery, listSlug]);
-
-  // React Query handles all fetching automatically
-  // No manual fetch needed - unified query will update store and dispatch events
-
-  // Watch for list updates from store and update loading state when valid data arrives
-  useEffect(() => {
+    
+    // If React Query is still loading and we have a slug, show loading
+    if (isLoadingQuery && listSlug) {
+      setIsLoading(true);
+      return;
+    }
+    
+    // Fallback: Check store for list data matching current slug
     if (typeof slug === "string" && list && list.slug === slug) {
-      // We have valid list data matching the current slug - hide loading
       setIsLoading(false);
-    } else if (slug && list && list.slug && list.slug !== slug) {
-      // List data doesn't match current slug - keep loading or reset
-      setIsLoading(true);
     }
-  }, [list, slug]);
+  }, [unifiedData, isLoadingQuery, listSlug, list, slug]);
 
   // Track current permissions with a ref to check in callbacks
   const permissionsRef = useRef(permissions);

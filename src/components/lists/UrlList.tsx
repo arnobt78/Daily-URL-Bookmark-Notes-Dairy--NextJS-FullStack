@@ -167,6 +167,7 @@ export function UrlList() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const permissions = useListPermissions(); // Get permissions for current list and user
+  const listSlug = list?.slug; // Get slug for React Query invalidations
   const [newUrl, setNewUrl] = useState("");
   
   // Debug logging for list store updates to verify re-renders
@@ -431,11 +432,10 @@ export function UrlList() {
       prefetchedMetadataRef.current = prefetchKey;
 
       try {
-        const startTime = performance.now();
-        // Fetch all metadata from unified endpoint (cached in Redis)
-        // This is the SINGLE API call that replaces 9 individual calls
+        // OPTIMIZATION: Fetch metadata in background - don't block page render
+        // This is a background prefetch that happens after page is visible
+        // The page will show URLs immediately, metadata loads progressively
         const response = await fetch(`/api/lists/${listId}/metadata`);
-        const fetchTime = performance.now() - startTime;
 
         if (response.ok) {
           const { metadata, cached } = await response.json();
