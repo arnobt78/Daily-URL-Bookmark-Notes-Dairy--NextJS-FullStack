@@ -1,4 +1,4 @@
-# The Daily Urlist - Next.js, TanStack React Query, Prisma, PostgreSQL, Upstash, QStash, Cloudinary, Google Gemini, Groq, OpenRouter, Hugging Face FullStack URL Bookmark Manager
+# Smart AI Collaborative URL Bookmark Manager - Next.js, TanStack React Query, Prisma, PostgreSQL, Upstash, QStash, Cloudinary, Google Gemini, Groq, OpenRouter, Hugging Face FullStack Project
 
 > A production-ready, full-stack URL bookmarking and sharing platform built with Next.js 15, React, TypeScript, and PostgreSQL. Features AI-powered enhancements, real-time collaboration, vector search, and intelligent URL organization.
 
