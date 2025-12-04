@@ -406,21 +406,25 @@ export function UrlList() {
     const urlCount = uniqueUrls.length;
     const prefetchKey = `${listId}:${urlsHash}`;
 
-    // Skip if already prefetched AND completed
+    // CRITICAL: Check React Query cache FIRST before making any API calls
+    // This ensures we skip the API call if all metadata is already cached
+    // Works across page visits because React Query cache persists
+    const allCached = uniqueUrls.every((url) => {
+      const queryKey = listQueryKeys.urlMetadata(url);
+      return !!queryClient.getQueryData<UrlMetadata>(queryKey);
+    });
+
+    if (allCached) {
+      // All metadata is cached in React Query - no API call needed
+      // Update refs to mark as complete
+      batchFetchCompleteRef.current = prefetchKey;
+      prefetchedMetadataRef.current = null;
+      return; // Skip API call - use cached data
+    }
+
+    // Skip if already prefetched AND completed (for same list state)
     if (batchFetchCompleteRef.current === prefetchKey) {
-      // Use same uniqueUrls array we computed above for consistency
-      const allCached = uniqueUrls.every((url) => {
-        const queryKey = listQueryKeys.urlMetadata(url);
-        return !!queryClient.getQueryData<UrlMetadata>(queryKey);
-      });
-      if (allCached) {
-        // console.log(
-        //   `⏭️ [BATCH] Already prefetched and cached for this list state (${urlCount} unique URLs)`
-        // );
-        return; // Already done
-      }
-      // Cache incomplete, need to re-fetch
-      batchFetchCompleteRef.current = null;
+      return; // Already done for this list state
     }
 
     // Skip if currently prefetching (wait for it to complete)
