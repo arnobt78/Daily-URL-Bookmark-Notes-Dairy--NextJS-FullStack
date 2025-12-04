@@ -11,10 +11,16 @@ export const browseQueryKeys = {
     [...browseQueryKeys.all, "public", page, search || ""] as const,
   businessInsights: {
     all: ["business-insights"] as const,
-    overview: () => [...browseQueryKeys.businessInsights.all, "overview"] as const,
+    overview: () =>
+      [...browseQueryKeys.businessInsights.all, "overview"] as const,
     activity: (days?: number) =>
-      [...browseQueryKeys.businessInsights.all, "activity", days || 30] as const,
-    popular: () => [...browseQueryKeys.businessInsights.all, "popular"] as const,
+      [
+        ...browseQueryKeys.businessInsights.all,
+        "activity",
+        days || 30,
+      ] as const,
+    popular: () =>
+      [...browseQueryKeys.businessInsights.all, "popular"] as const,
     performance: () =>
       [...browseQueryKeys.businessInsights.all, "performance"] as const,
     global: () => [...browseQueryKeys.businessInsights.all, "global"] as const,
@@ -86,12 +92,14 @@ export function usePublicListsQuery(page: number, search?: string) {
     },
     // CRITICAL: Cache forever until invalidated (public lists change rarely)
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache after component unmounts
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts (matches default)
     refetchOnWindowFocus: false, // Don't refetch on tab switch
-    // CRITICAL: Refetch only when stale (invalidated)
+    // CRITICAL: With staleTime: Infinity, refetchOnMount: true only refetches if data was invalidated
+    // If data is fresh (not invalidated), it uses cache instantly (no API call)
     refetchOnMount: true, // Refetch only when stale (after invalidation)
+    refetchOnReconnect: false, // Don't refetch on reconnect
     retry: 1,
-    // CRITICAL: Use stale data immediately if available
+    // CRITICAL: Use stale data immediately if available (shows cached data instantly)
     placeholderData: (previousData) => previousData, // Keep previous data visible while refetching
   });
 }
@@ -184,11 +192,12 @@ export function useBusinessOverviewQuery() {
       return response.json();
     },
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    refetchOnMount: true, // Refetch only when stale (after invalidation)
+    refetchOnReconnect: false, // Don't refetch on reconnect
     retry: 1,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData) => previousData, // Use cached data instantly
   });
 }
 
@@ -199,18 +208,21 @@ export function useBusinessActivityQuery(days: number = 30) {
   return useQuery<{ activity: ActivityData[] }>({
     queryKey: browseQueryKeys.businessInsights.activity(days),
     queryFn: async () => {
-      const response = await fetch(`/api/business-insights/activity?days=${days}`);
+      const response = await fetch(
+        `/api/business-insights/activity?days=${days}`
+      );
       if (!response.ok) {
         throw new Error(`Failed to fetch activity: ${response.status}`);
       }
       return response.json();
     },
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    refetchOnMount: true, // Refetch only when stale (after invalidation)
+    refetchOnReconnect: false, // Don't refetch on reconnect
     retry: 1,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData) => previousData, // Use cached data instantly
   });
 }
 
@@ -228,11 +240,12 @@ export function useBusinessPopularQuery() {
       return response.json();
     },
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    refetchOnMount: true, // Refetch only when stale (after invalidation)
+    refetchOnReconnect: false, // Don't refetch on reconnect
     retry: 1,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData) => previousData, // Use cached data instantly
   });
 }
 
@@ -250,11 +263,12 @@ export function useBusinessPerformanceQuery() {
       return response.json();
     },
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    refetchOnMount: true, // Refetch only when stale (after invalidation)
+    refetchOnReconnect: false, // Don't refetch on reconnect
     retry: 1,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData) => previousData, // Use cached data instantly
   });
 }
 
@@ -272,11 +286,12 @@ export function useBusinessGlobalQuery() {
       return response.json();
     },
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    refetchOnMount: true, // Refetch only when stale (after invalidation)
+    refetchOnReconnect: false, // Don't refetch on reconnect
     retry: 1,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData) => previousData, // Use cached data instantly
   });
 }
 
@@ -324,4 +339,3 @@ export function useApiStatusQuery() {
     placeholderData: (previousData) => previousData, // Show cached data while polling
   });
 }
-

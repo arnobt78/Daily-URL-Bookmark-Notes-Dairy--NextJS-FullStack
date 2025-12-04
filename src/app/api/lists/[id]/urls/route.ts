@@ -596,12 +596,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     // Log what we received from client
     if (reorderedUrls && Array.isArray(reorderedUrls)) {
       const receivedOrder = reorderedUrls.map((u: UrlItem) => u.id).join(",");
-      console.log(`📥 [PATCH] Received reorder request`, {
-        listId: listId,
-        receivedOrder: receivedOrder,
-        urlCount: reorderedUrls.length,
-        action: requestAction,
-      });
+      if (process.env.NODE_ENV === "development") {
+        console.log(`📥 [PATCH] Received reorder request`, {
+          listId: listId,
+          receivedOrder: receivedOrder,
+          urlCount: reorderedUrls.length,
+          action: requestAction,
+        });
+      }
     }
 
     // Support both single URL update and bulk reorder
@@ -720,12 +722,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         // Priority 1: Use provided metadata from client (from prefetch cache)
         if (providedMetadata) {
           urlMetadata = providedMetadata;
-          console.log(
-            `✅ [PATCH] Using provided metadata (from prefetch cache) for: ${updatedUrl.url.slice(
-              0,
-              40
-            )}...`
-          );
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `✅ [PATCH] Using provided metadata (from prefetch cache) for: ${updatedUrl.url.slice(
+                0,
+                40
+              )}...`
+            );
+          }
 
           // Also cache it in Redis for future requests
           if (redis) {
@@ -744,12 +748,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
               const cached = await redis.get<UrlMetadata>(urlCacheKey);
               if (cached) {
                 urlMetadata = cached;
-                console.log(
-                  `✅ [PATCH] Using cached metadata from Redis for: ${updatedUrl.url.slice(
-                    0,
-                    40
-                  )}...`
-                );
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    `✅ [PATCH] Using cached metadata from Redis for: ${updatedUrl.url.slice(
+                      0,
+                      40
+                    )}...`
+                  );
+                }
               }
             } catch {
               // Ignore Redis errors
@@ -921,11 +927,13 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (isReorderOperation) {
       const savedOrder =
         (updated.urls as unknown as UrlItem[])?.map((u: UrlItem) => u.id) || [];
-      console.log(`✅ [PATCH] URLs reordered (action: ${activityAction})`, {
-        savedOrder: savedOrder.join(","),
-        urlCount: savedOrder.length,
-        listId: listId,
-      });
+      if (process.env.NODE_ENV === "development") {
+        console.log(`✅ [PATCH] URLs reordered (action: ${activityAction})`, {
+          savedOrder: savedOrder.join(","),
+          urlCount: savedOrder.length,
+          listId: listId,
+        });
+      }
       // Return unified response for reorder
       return NextResponse.json({
         success: true,
@@ -942,9 +950,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         },
       });
     } else {
-      console.log(
-        `✅ [PATCH] URL updated: ${updatedUrl?.url} (action: ${activityAction})`
-      );
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `✅ [PATCH] URL updated: ${updatedUrl?.url} (action: ${activityAction})`
+        );
+      }
       // Return unified response for single URL update
       return NextResponse.json({
         success: true,
@@ -964,7 +974,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       });
     }
   } catch (error) {
-    console.error("❌ [PATCH] Error:", error);
+    if (process.env.NODE_ENV === "development") {
+      console.error("❌ [PATCH] Error:", error);
+    }
     const message =
       error instanceof Error ? error.message : "Failed to update URL";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -1097,7 +1109,9 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       });
     }
 
-    console.log(`✅ [DELETE] URL deleted: ${deletedUrl.url}`);
+    if (process.env.NODE_ENV === "development") {
+      console.log(`✅ [DELETE] URL deleted: ${deletedUrl.url}`);
+    }
     // Return unified response
     return NextResponse.json({
       success: true,
@@ -1115,7 +1129,9 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       },
     });
   } catch (error) {
-    console.error("❌ [DELETE] Error:", error);
+    if (process.env.NODE_ENV === "development") {
+      console.error("❌ [DELETE] Error:", error);
+    }
     const message =
       error instanceof Error ? error.message : "Failed to delete URL";
     return NextResponse.json({ error: message }, { status: 500 });
