@@ -12,7 +12,17 @@ A production-ready, full-stack URL bookmarking and sharing platform built with N
 
 ---
 
-<img width="1913" height="909" alt="Screenshot 2025-12-05 at 13 25 33" src="https://github.com/user-attachments/assets/7369ad36-5a47-4e30-97ed-f6fab885515f" /> <img width="1749" height="906" alt="Screenshot 2025-12-05 at 13 25 56" src="https://github.com/user-attachments/assets/7d041189-6bab-41df-9cbb-25c3d16d8c67" /> <img width="1527" height="787" alt="Screenshot 2025-12-05 at 13 30 16" src="https://github.com/user-attachments/assets/706ddbb4-3db8-4539-853d-2f2f14d08880" /> <img width="1476" height="920" alt="Screenshot 2025-12-05 at 13 34 13" src="https://github.com/user-attachments/assets/efd8b411-1101-439b-87b2-c4c0470ce3b0" /> <img width="1402" height="892" alt="Screenshot 2025-12-05 at 13 37 33" src="https://github.com/user-attachments/assets/eeab7fab-f0f5-4e1e-909f-66f4336ef7c6" /> <img width="1376" height="913" alt="Screenshot 2025-12-05 at 13 37 57" src="https://github.com/user-attachments/assets/4de03b81-0a5f-4b69-85c4-04abb6ee954a" /> <img width="1392" height="911" alt="Screenshot 2025-12-05 at 13 38 31" src="https://github.com/user-attachments/assets/cfe75594-5d32-4cdd-b373-d1f59df4caa4" /> <img width="1392" height="764" alt="Screenshot 2025-12-05 at 13 38 44" src="https://github.com/user-attachments/assets/6ed2a934-3282-4f3d-aba7-667f73ce4e77" /> <img width="1387" height="862" alt="Screenshot 2025-12-05 at 13 39 02" src="https://github.com/user-attachments/assets/5d040034-ccc3-4c35-8472-7de6dd29900c" /> <img width="1415" height="853" alt="Screenshot 2025-12-05 at 13 39 17" src="https://github.com/user-attachments/assets/a4f27ec3-c645-49b5-b4c2-2eb61732d05e" /> <img width="1413" height="919" alt="Screenshot 2025-12-05 at 13 39 40" src="https://github.com/user-attachments/assets/e9e43a9f-8387-40c7-855a-6d52e1ca1fae" />
+![Screenshot 2025-12-05 at 13 25 33](https://github.com/user-attachments/assets/7369ad36-5a47-4e30-97ed-f6fab885515f)
+![Screenshot 2025-12-05 at 13 25 56](https://github.com/user-attachments/assets/7d041189-6bab-41df-9cbb-25c3d16d8c67)
+![Screenshot 2025-12-05 at 13 30 16](https://github.com/user-attachments/assets/706ddbb4-3db8-4539-853d-2f2f14d08880)
+![Screenshot 2025-12-05 at 13 34 13](https://github.com/user-attachments/assets/efd8b411-1101-439b-87b2-c4c0470ce3b0)
+![Screenshot 2025-12-05 at 13 37 33](https://github.com/user-attachments/assets/eeab7fab-f0f5-4e1e-909f-66f4336ef7c6)
+![Screenshot 2025-12-05 at 13 37 57](https://github.com/user-attachments/assets/4de03b81-0a5f-4b69-85c4-04abb6ee954a)
+![Screenshot 2025-12-05 at 13 38 31](https://github.com/user-attachments/assets/cfe75594-5d32-4cdd-b373-d1f59df4caa4)
+![Screenshot 2025-12-05 at 13 38 44](https://github.com/user-attachments/assets/6ed2a934-3282-4f3d-aba7-667f73ce4e77)
+![Screenshot 2025-12-05 at 13 39 02](https://github.com/user-attachments/assets/5d040034-ccc3-4c35-8472-7de6dd29900c)
+![Screenshot 2025-12-05 at 13 39 17](https://github.com/user-attachments/assets/a4f27ec3-c645-49b5-b4c2-2eb61732d05e)
+![Screenshot 2025-12-05 at 13 39 40](https://github.com/user-attachments/assets/e9e43a9f-8387-40c7-855a-6d52e1ca1fae)
 
 ## 📖 Table of Contents
 
@@ -230,38 +240,38 @@ daily-urlist/
 
 1. **Clone the Repository**
 
-```bash
-git clone <repository-url>
-cd daily-urlist
-```
+   ```bash
+   git clone <repository-url>
+   cd daily-urlist
+   ```
 
 2. **Install Dependencies**
 
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
 3. **Set Up Environment Variables**
 
-Create a `.env.local` file in the root directory (see [Environment Variables](#-environment-variables) section below).
+   Create a `.env.local` file in the root directory (see [Environment Variables](#-environment-variables) section below).
 
 4. **Set Up Database**
 
-```bash
-# Generate Prisma Client
-npm run db:generate
+   ```bash
+   # Generate Prisma Client
+   npm run db:generate
 
-# Run database migrations
-npm run db:migrate
-```
+   # Run database migrations
+   npm run db:migrate
+   ```
 
 5. **Start Development Server**
 
-```bash
-npm run dev
-```
+   ```bash
+   npm run dev
+   ```
 
-The application will be available at `http://localhost:3000`
+   The application will be available at `http://localhost:3000`
 
 ---
 
