@@ -44,12 +44,25 @@ export default function BrowsePage() {
   );
 
   // CRITICAL: Use React Query with Infinity cache - only refetches when invalidated
-  const { data, isLoading } = usePublicListsQuery(page, search || undefined);
+  const { data, isLoading, isFetching } = usePublicListsQuery(page, search || undefined);
   const lists = data?.lists || [];
   const totalPages = data?.pagination?.totalPages || 1;
 
-  // Update URL query params when search or page changes
+  // CRITICAL: Show skeleton during refetch (when isFetching is true and we have data)
+  // This prevents showing stale cached data during invalidated refetch
+  // Only show skeleton if we're fetching AND have data (means refetch, not initial load)
+  const shouldShowSkeleton = isLoading || (isFetching && data);
+
+  // Update URL query params when search or page changes (but only if different from current URL)
   useEffect(() => {
+    const currentSearch = searchParams.get("search") || "";
+    const currentPage = parseInt(searchParams.get("page") || "1", 10);
+
+    // Only update URL if state differs from URL params (prevents unnecessary RSC requests)
+    if (search === currentSearch && page === currentPage) {
+      return; // No change needed, skip router.replace to avoid extra RSC request
+    }
+
     const params = new URLSearchParams();
     if (search) {
       params.set("search", search);
@@ -61,7 +74,7 @@ export default function BrowsePage() {
     const newUrl = queryString ? `?${queryString}` : "";
     router.replace(`/browse${newUrl}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search]);
+  }, [page, search, searchParams, router]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +116,7 @@ export default function BrowsePage() {
       </form>
 
       {/* Lists Grid */}
-      {isLoading ? (
+      {shouldShowSkeleton ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
             <div

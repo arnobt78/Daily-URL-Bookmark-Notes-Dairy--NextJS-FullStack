@@ -34,17 +34,25 @@ interface SessionUser {
 }
 
 export default function HomePage() {
-  const { user: session, isLoading: sessionLoading } = useSession();
+  const { user: session, isLoading: sessionLoading, isFetching: sessionFetching } = useSession();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const loading = !mounted || sessionLoading;
+  // CRITICAL: Show skeleton during initial mount, loading, or refetch
+  // This prevents showing stale cached session data or homepage UI before session is confirmed
+  // Same pattern as BrowsePage - show skeleton if loading OR fetching (prevents stale data flash)
+  // Show skeleton if:
+  // 1. Not mounted yet (prevents hydration mismatch and shows skeleton instead of homepage/Auth)
+  // 2. Initial loading (isLoading = true, no cache yet - first visit or empty cache)
+  // 3. Refetching (isFetching = true, prevents showing stale cached session data)
+  // This ensures skeleton shows instead of briefly flashing homepage UI or Auth component
+  const shouldShowSkeleton = !mounted || sessionLoading || sessionFetching;
 
-  // Show skeleton loading while mounted is false or while loading
-  if (!mounted || loading) {
+  // Show skeleton loading while mounted is false, loading, or fetching
+  if (shouldShowSkeleton) {
     return (
       <div className="min-h-screen w-full">
         {/* Hero Section Skeleton */}

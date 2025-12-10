@@ -16,7 +16,7 @@ interface SessionResponse {
  * Uses React Query to cache the session and prevent duplicate fetches
  */
 export function useSession() {
-  const { data, isLoading, error, refetch } = useQuery<SessionResponse>({
+  const { data, isLoading, isFetching, error, refetch } = useQuery<SessionResponse>({
     queryKey: ["session"],
     queryFn: async () => {
       const response = await fetch("/api/auth/session");
@@ -43,9 +43,9 @@ export function useSession() {
   return {
     user: data?.user || null,
     isLoading,
+    isFetching, // Track fetching state for skeleton display (prevents showing stale cached data)
     isAuthenticated: !!data?.user,
     error,
     refetch,
   };
 }
-
