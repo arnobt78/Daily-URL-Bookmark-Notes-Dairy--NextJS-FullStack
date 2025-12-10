@@ -150,7 +150,8 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
         variant: "success",
       });
 
-      // Dispatch activity events for optimistic update and feed refresh
+      // CRITICAL: Dispatch activity-added event for immediate optimistic activity feed update
+      // This provides instant feedback before unified query refetch completes
       if (data.activity) {
         window.dispatchEvent(
           new CustomEvent("activity-added", {
@@ -160,9 +161,16 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
             },
           })
         );
-        
-        // UNIFIED APPROACH: SSE handles ALL activity-updated events (single source of truth)
-        // No local dispatch needed - prevents duplicate API calls
+      }
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // This ensures activity feed gets complete updated list (matches edit/delete behavior)
+      // Same pattern as URL add/edit/delete mutations for consistency
+      const currentSlug = slug || list?.slug;
+      if (currentSlug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(currentSlug),
+        });
       }
     },
     onError: (error, _variables, context) => {

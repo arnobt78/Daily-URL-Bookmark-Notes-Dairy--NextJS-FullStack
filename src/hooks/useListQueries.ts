@@ -9,6 +9,7 @@ import {
   invalidateUrlQueries,
   invalidateAllListsQueries,
   invalidateListQueries,
+  invalidateBrowseQueries,
 } from "@/utils/queryInvalidation";
 
 // ============================================
@@ -74,6 +75,11 @@ export function useUnifiedListQuery(slug: string, enabled: boolean = true) {
               detail: { listId: slug, slug },
             })
           );
+          return { list: null, activities: [], collaborators: [] };
+        }
+        // CRITICAL: Handle 404 (list not found/deleted) by returning null list
+        // This ensures ListPage shows "List not found" instead of error
+        if (response.status === 404) {
           return { list: null, activities: [], collaborators: [] };
         }
         throw new Error(`Failed to fetch: ${response.status}`);
@@ -770,9 +776,10 @@ export function useDeleteList() {
         listQueryKeys.allLists()
       );
 
-      // Get list title before removing from cache
+      // Get list details before removing from cache (needed for invalidation and toast)
       const deletedList = previous?.lists?.find((l) => l.id === listId);
       const listTitle = deletedList?.title || deletedList?.slug || "List";
+      const listSlug = deletedList?.slug;
 
       queryClient.setQueryData<{ lists: UserList[] }>(
         listQueryKeys.allLists(),
@@ -784,13 +791,24 @@ export function useDeleteList() {
         }
       );
 
-      return { previous, deletedListTitle: listTitle };
+      return { previous, deletedListTitle: listTitle, deletedListSlug: listSlug };
     },
     onSuccess: (data, listId, context) => {
-      // OPTIMIZATION: We already did optimistic update with setQueryData
-      // Only invalidate if we need to ensure server consistency
-      // React Query will dedupe multiple invalidations, but we use predicate for efficiency
+      // CRITICAL: Invalidate all list-related queries to ensure consistency across all pages
+      // This includes user's lists page, browse/public lists page, and individual list pages
       invalidateAllListsQueries(queryClient);
+      
+      // CRITICAL: Also invalidate browse/public lists queries to remove deleted list from browse page
+      // When a list is deleted, it should disappear from both user's lists AND public browse page
+      invalidateBrowseQueries(queryClient);
+
+      // CRITICAL: Invalidate unified query for this specific list to ensure list page shows "not found"
+      // This ensures that if someone navigates to the deleted list's URL, they see proper 404/not found
+      if (context?.deletedListSlug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(context.deletedListSlug),
+        });
+      }
 
       // Use list title from context (captured before deletion)
       const listTitle = context?.deletedListTitle || "List";

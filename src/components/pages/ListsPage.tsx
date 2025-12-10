@@ -58,12 +58,12 @@ export default function ListsPageClient() {
     const listTitle = listToDelete.title || listToDelete.slug;
 
     // Use React Query mutation (handles optimistic updates, rollback, and toasts automatically)
+    // OPTIMIZATION: No need to call refetch() - mutation's onSuccess already invalidates and triggers refetch
     deleteListMutation.mutate(id, {
       onSuccess: () => {
         setDeleteDialogOpen(false);
         setListToDelete(null);
-        // Refetch lists to ensure cache is up to date
-        refetch();
+        // No need to refetch - mutation's invalidateAllListsQueries already triggers refetch
       },
       onError: () => {
         // Error toast is handled by mutation
