@@ -1,6 +1,8 @@
 import { atom, map } from "nanostores";
 import { queryClient } from "@/lib/react-query";
 import type { UrlMetadata } from "@/utils/urlMetadata";
+import { listQueryKeys } from "@/hooks/useListQueries";
+import { invalidateUrlQueries } from "@/utils/queryInvalidation";
 import {
   syncDragOrderCacheWithServer,
   getCachedDragOrder,
@@ -731,6 +733,13 @@ export async function addUrlToList(
             }
           }
         }
+
+        // CRITICAL: Invalidate unified query to ensure activity feed updates immediately
+        // This triggers the unified endpoint (updates?activityLimit=30) to refetch
+        // The optimistic activity-added event provides instant feedback, invalidation ensures persistence
+        if (current.slug) {
+          invalidateUrlQueries(queryClient, current.slug, current.id, false);
+        }
       } catch {
         // Ignore errors - real-time event will handle it
       }
@@ -892,6 +901,13 @@ export async function updateUrlInList(
             }
           }
         }
+
+        // CRITICAL: Invalidate unified query to ensure activity feed updates immediately
+        // This triggers the unified endpoint (updates?activityLimit=30) to refetch
+        // The optimistic activity-added event provides instant feedback, invalidation ensures persistence
+        if (current.slug) {
+          invalidateUrlQueries(queryClient, current.slug, current.id, false);
+        }
       } catch {
         // Ignore errors - real-time event will handle it
       }
@@ -1001,23 +1017,43 @@ export async function removeUrlFromList(urlId: string) {
     }
 
     // Dispatch activity events for optimistic feed update and refresh
+    // Use user data from activity if available (from API response), otherwise fetch session
     if (typeof window !== "undefined" && activity && current.id) {
       try {
-        const sessionResponse = await fetch("/api/auth/session");
-        if (sessionResponse.ok) {
-          const { user } = await sessionResponse.json();
-          if (user?.email) {
-            dispatchActivityEvents(current.id, {
-              id: activity.id,
-              action: activity.action,
-              details: activity.details,
-              createdAt: activity.createdAt,
-              user: {
-                id: user.id,
-                email: user.email,
-              },
-            });
+        // If activity already has user data (from API response), use it directly
+        if (activity.user?.email) {
+          dispatchActivityEvents(current.id, {
+            id: activity.id,
+            action: activity.action,
+            details: activity.details,
+            createdAt: activity.createdAt,
+            user: activity.user,
+          });
+        } else {
+          // Fallback: fetch session if user data not in response (backward compatibility)
+          const sessionResponse = await fetch("/api/auth/session");
+          if (sessionResponse.ok) {
+            const { user } = await sessionResponse.json();
+            if (user?.email) {
+              dispatchActivityEvents(current.id, {
+                id: activity.id,
+                action: activity.action,
+                details: activity.details,
+                createdAt: activity.createdAt,
+                user: {
+                  id: user.id,
+                  email: user.email,
+                },
+              });
+            }
           }
+        }
+
+        // CRITICAL: Invalidate unified query to ensure activity feed updates immediately
+        // This triggers the unified endpoint (updates?activityLimit=30) to refetch
+        // The optimistic activity-added event provides instant feedback, invalidation ensures persistence
+        if (current.slug) {
+          invalidateUrlQueries(queryClient, current.slug, current.id, false);
         }
       } catch {
         // Ignore errors - real-time event will handle it

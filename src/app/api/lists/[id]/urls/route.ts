@@ -1112,7 +1112,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     if (process.env.NODE_ENV === "development") {
       console.log(`✅ [DELETE] URL deleted: ${deletedUrl.url}`);
     }
-    // Return unified response
+    // Return unified response with user info in activity to avoid client-side session fetch
     return NextResponse.json({
       success: true,
       list: updated,
@@ -1121,6 +1121,16 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
         action: "url_deleted",
         details: activityDetails,
         createdAt: activity.createdAt,
+        // CRITICAL: Include user info to avoid client-side session fetch (optimization)
+        user: activity.user
+          ? {
+              id: activity.user.id,
+              email: activity.user.email,
+            }
+          : {
+              id: user.id,
+              email: user.email,
+            },
       },
       deletedUrl: {
         id: deletedUrl.id,
