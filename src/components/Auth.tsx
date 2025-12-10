@@ -15,6 +15,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [showSubtitle, setShowSubtitle] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // Get redirect URL from sessionStorage (set when user tries to access protected resource)
   const getRedirectUrl = () => {
@@ -41,18 +42,32 @@ export default function Auth() {
     delay: 3500,
   });
 
+  // CRITICAL: Reset welcome animation when component becomes visible
+  // This ensures the welcome animation always plays when Auth component is shown,
+  // even if component was prefetched by Next.js (prevents skipped animation)
+  useEffect(() => {
+    setMounted(true);
+    // Reset welcome state when component mounts/becomes visible
+    setShowWelcome(true);
+    setShowSubtitle(false);
+  }, []);
+
   useEffect(() => {
     if (isMainComplete) {
       setShowSubtitle(true);
     }
   }, [isMainComplete]);
 
+  // CRITICAL: Only start welcome animation timer after component is mounted and visible
+  // This ensures animation plays from start even if component was prefetched
   useEffect(() => {
+    if (!mounted) return;
+
     const timer = setTimeout(() => {
       setShowWelcome(false);
     }, 8000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [mounted]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();

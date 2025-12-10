@@ -41,15 +41,15 @@ export default function HomePage() {
     setMounted(true);
   }, []);
 
-  // CRITICAL: Show skeleton during initial mount, loading, or refetch
+  // CRITICAL: Show skeleton during initial mount or loading
   // This prevents showing stale cached session data or homepage UI before session is confirmed
-  // Same pattern as BrowsePage - show skeleton if loading OR fetching (prevents stale data flash)
   // Show skeleton if:
   // 1. Not mounted yet (prevents hydration mismatch and shows skeleton instead of homepage/Auth)
   // 2. Initial loading (isLoading = true, no cache yet - first visit or empty cache)
-  // 3. Refetching (isFetching = true, prevents showing stale cached session data)
-  // This ensures skeleton shows instead of briefly flashing homepage UI or Auth component
-  const shouldShowSkeleton = !mounted || sessionLoading || sessionFetching;
+  // Note: Once session state is confirmed (null = no user, user object = logged in), show Auth/Homepage
+  // We don't check sessionFetching here because it can be true even after we have confirmed session state
+  // This ensures skeleton shows only during initial load, then Auth/Homepage shows immediately
+  const shouldShowSkeleton = !mounted || sessionLoading;
 
   // Show skeleton loading while mounted is false, loading, or fetching
   if (shouldShowSkeleton) {
