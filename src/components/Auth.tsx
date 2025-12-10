@@ -5,6 +5,7 @@ import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useToast } from "@/components/ui/Toaster";
 import { useQueryClient } from "@tanstack/react-query";
+import { Select } from "@/components/ui/Select";
 
 export default function Auth() {
   const { toast } = useToast();
@@ -326,6 +327,35 @@ export default function Auth() {
           </div>
 
           <form className="space-y-6">
+            {/* Guest User Selection Dropdown - Demo Feature */}
+            {/* Allows recruiters/reviewers to quickly test the application with pre-filled credentials */}
+            <div>
+              <Select
+                value={email === "test@example.com" && password === "12345678" ? "guest" : "regular"}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "guest") {
+                    // CRITICAL: Auto-fill guest user credentials for demo purposes
+                    // This allows recruiters/reviewers to quickly test the application
+                    setEmail("test@example.com");
+                    setPassword("12345678");
+                  } else {
+                    // Reset to empty for regular login
+                    setEmail("");
+                    setPassword("");
+                  }
+                }}
+                className="w-full rounded-xl border border-white/20 bg-white/10 backdrop-blur-sm px-4 py-3 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-[#00ff99] focus:border-transparent transition-all"
+              >
+                <option value="regular" className="bg-zinc-900 text-white">
+                  Regular Login
+                </option>
+                <option value="guest" className="bg-zinc-900 text-white">
+                  Select as Guest User
+                </option>
+              </Select>
+            </div>
+
             <div>
               <input
                 type="email"
