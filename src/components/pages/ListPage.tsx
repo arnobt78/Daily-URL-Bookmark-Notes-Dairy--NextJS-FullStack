@@ -33,6 +33,7 @@ import {
   listQueryKeys,
 } from "@/hooks/useListQueries";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateBrowseQueries } from "@/utils/queryInvalidation";
 
 export default function ListPageClient() {
   const { toast } = useToast();
@@ -681,8 +682,8 @@ export default function ListPageClient() {
                           currentList.set(updatedList);
                         });
 
-                        // CRITICAL: Invalidate both unified list query AND allLists query
-                        // This ensures ListsPage updates immediately without refresh
+                        // CRITICAL: Invalidate ALL related queries to ensure all pages update immediately
+                        // This ensures ListsPage, BrowsePage, and current page all update without refresh
                         if (typeof slug === "string") {
                           queryClient.invalidateQueries({
                             queryKey: listQueryKeys.unified(slug),
@@ -692,6 +693,9 @@ export default function ListPageClient() {
                         queryClient.invalidateQueries({
                           queryKey: listQueryKeys.allLists(),
                         });
+                        // CRITICAL: Invalidate browse/public lists queries so BrowsePage updates immediately
+                        // Use centralized invalidation function for consistency
+                        invalidateBrowseQueries(queryClient);
 
                         // UNIFIED APPROACH: SSE handles ALL activity-updated events (single source of truth)
                         // No local dispatch needed - prevents duplicate API calls
@@ -716,6 +720,9 @@ export default function ListPageClient() {
                         queryClient.invalidateQueries({
                           queryKey: listQueryKeys.allLists(),
                         });
+                        // CRITICAL: Invalidate browse/public lists queries so BrowsePage updates immediately
+                        // Use centralized invalidation function for consistency
+                        invalidateBrowseQueries(queryClient);
                         toast({
                           title: newValue
                             ? "Made Public 🌐"
@@ -917,8 +924,25 @@ export default function ListPageClient() {
                           currentList.set(data.list);
                         });
 
-                        // UNIFIED APPROACH: SSE handles ALL activity-updated events (single source of truth)
-                        // No local dispatch needed - prevents duplicate API calls
+                        // CRITICAL: Dispatch activity-added event if activity data is present
+                        if (data.activity && typeof slug === "string") {
+                          window.dispatchEvent(
+                            new CustomEvent("activity-added", {
+                              detail: {
+                                listId: data.list.id || list?.id,
+                                activity: data.activity,
+                              },
+                            })
+                          );
+                        }
+
+                        // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+                        // This ensures activity feed gets complete updated list with health check activity
+                        if (typeof slug === "string") {
+                          queryClient.invalidateQueries({
+                            queryKey: listQueryKeys.unified(slug),
+                          });
+                        }
                       } else if (typeof slug === "string") {
                         // Fallback: use React Query invalidation - triggers unified endpoint refetch
                         queryClient.invalidateQueries({

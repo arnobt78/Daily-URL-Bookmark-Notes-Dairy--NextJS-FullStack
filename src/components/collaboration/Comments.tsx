@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams } from "next/navigation";
+import { useStore } from "@nanostores/react";
+import { currentList } from "@/stores/urlListStore";
+import { listQueryKeys } from "@/hooks/useListQueries";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toaster";
@@ -33,6 +37,9 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const params = useParams();
+  const slug = typeof params?.slug === "string" ? params.slug : null;
+  const list = useStore(currentList);
 
   // React Query key for comments
   const queryKey = ["comments", listId, urlId];
@@ -56,7 +63,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
     // With staleTime: Infinity, data never becomes stale automatically
     // Only becomes stale when manually invalidated, then refetches once
     staleTime: Infinity, // Cache forever until invalidated
-    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache after component unmounts
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days - keep in cache after component unmounts (matches standard)
     refetchOnWindowFocus: false, // Don't refetch on tab switch
     // CRITICAL: Refetch only when stale (invalidated)
     // With staleTime: Infinity, this only triggers after invalidation
@@ -248,7 +255,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
         variant: "success",
       });
 
-      // Dispatch activity events for optimistic update and feed refresh
+      // CRITICAL: Dispatch activity-added event for immediate activity feed update
       if (data.activity) {
         window.dispatchEvent(
           new CustomEvent("activity-added", {
@@ -258,9 +265,15 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
             },
           })
         );
-        
-        // UNIFIED APPROACH: SSE handles ALL activity-updated events (single source of truth)
-        // No local dispatch needed - prevents duplicate API calls
+      }
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // This ensures activity feed gets complete updated list
+      const currentSlug = slug || list?.slug;
+      if (currentSlug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(currentSlug),
+        });
       }
     },
     onError: (error, _variables, context) => {
@@ -325,7 +338,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
         variant: "success",
       });
 
-      // Dispatch activity-added event with activity data from server
+      // CRITICAL: Dispatch activity-added event for immediate activity feed update
       if (data?.activity) {
         window.dispatchEvent(
           new CustomEvent("activity-added", {
@@ -335,6 +348,15 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
             },
           })
         );
+      }
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // This ensures activity feed gets complete updated list
+      const currentSlug = slug || list?.slug;
+      if (currentSlug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(currentSlug),
+        });
       }
 
       // Note: We don't dispatch "comment-updated" here because:

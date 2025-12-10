@@ -173,16 +173,18 @@ export function useAddCollaborator(listId: string, listSlug?: string) {
         collaborators: Array<{ email: string; role: string }>;
       }>(queryKey);
 
-      queryClient.setQueryData(queryKey, (old: any) => {
+      queryClient.setQueryData<{
+        collaborators: Array<{ email: string; role: string }>;
+      }>(queryKey, (old) => {
         const existing = old?.collaborators || [];
         const trimmedEmail = email.trim().toLowerCase();
         const exists = existing.some(
-          (c: any) => c.email.toLowerCase() === trimmedEmail
+          (c) => c.email.toLowerCase() === trimmedEmail
         );
 
         if (exists) {
           return {
-            collaborators: existing.map((c: any) =>
+            collaborators: existing.map((c) =>
               c.email.toLowerCase() === trimmedEmail ? { ...c, role } : c
             ),
           };
@@ -262,11 +264,13 @@ export function useUpdateCollaboratorRole(listId: string, listSlug?: string) {
         collaborators: Array<{ email: string; role: string }>;
       }>(queryKey);
 
-      queryClient.setQueryData(queryKey, (old: any) => {
+      queryClient.setQueryData<{
+        collaborators: Array<{ email: string; role: string }>;
+      }>(queryKey, (old) => {
         const existing = old?.collaborators || [];
         const emailLower = email.toLowerCase();
         return {
-          collaborators: existing.map((c: any) =>
+          collaborators: existing.map((c) =>
             c.email.toLowerCase() === emailLower ? { ...c, role } : c
           ),
         };
@@ -333,12 +337,14 @@ export function useRemoveCollaborator(listId: string, listSlug?: string) {
         collaborators: Array<{ email: string; role: string }>;
       }>(queryKey);
 
-      queryClient.setQueryData(queryKey, (old: any) => {
+      queryClient.setQueryData<{
+        collaborators: Array<{ email: string; role: string }>;
+      }>(queryKey, (old) => {
         const existing = old?.collaborators || [];
         const emailLower = email.toLowerCase();
         return {
           collaborators: existing.filter(
-            (c: any) => c.email.toLowerCase() !== emailLower
+            (c) => c.email.toLowerCase() !== emailLower
           ),
         };
       });
@@ -442,8 +448,32 @@ export function useAddUrl(listId: string, listSlug: string) {
         currentList.set(data.list);
       }
 
+      // CRITICAL: Dispatch activity-added event for immediate activity feed update
+      // This provides instant feedback before unified query refetch completes
+      if (typeof window !== "undefined" && data.activity && data.list?.id) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("activity-added", {
+              detail: {
+                listId: data.list.id,
+                activity: {
+                  id: data.activity.id,
+                  action: data.activity.action,
+                  details: data.activity.details,
+                  createdAt: data.activity.createdAt,
+                  user: data.activity.user || { id: "", email: "" },
+                },
+              },
+            })
+          );
+        } catch {
+          // Ignore errors - unified query refetch will handle it
+        }
+      }
+
       // CRITICAL: Use centralized invalidation for consistency
       // Invalidates unified query, all lists, collections, and duplicates
+      // Unified query refetch will provide the complete activity list
       invalidateUrlQueries(queryClient, listSlug, listId, false);
 
       toast({
@@ -509,8 +539,32 @@ export function useDeleteUrl(listId: string, listSlug: string) {
         currentList.set(data.list);
       }
 
+      // CRITICAL: Dispatch activity-added event for immediate activity feed update
+      // This provides instant feedback before unified query refetch completes
+      if (typeof window !== "undefined" && data.activity && data.list?.id) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("activity-added", {
+              detail: {
+                listId: data.list.id,
+                activity: {
+                  id: data.activity.id,
+                  action: data.activity.action,
+                  details: data.activity.details,
+                  createdAt: data.activity.createdAt,
+                  user: data.activity.user || { id: "", email: "" },
+                },
+              },
+            })
+          );
+        } catch {
+          // Ignore errors - unified query refetch will handle it
+        }
+      }
+
       // CRITICAL: Use centralized invalidation for consistency
       // Invalidates unified query, all lists, collections, and duplicates
+      // Unified query refetch will provide the complete activity list
       invalidateUrlQueries(queryClient, listSlug, listId, false);
 
       const deletedUrl = data.deletedUrl;
@@ -590,8 +644,36 @@ export function useUpdateUrl(listId: string, listSlug: string) {
         currentList.set(data.list);
       }
 
+      // CRITICAL: Dispatch activity-added event for immediate activity feed update
+      // This provides instant feedback before unified query refetch completes
+      if (typeof window !== "undefined" && data.activity && data.list?.id) {
+        try {
+          // Dispatch activity-added event for optimistic activity feed update
+          window.dispatchEvent(
+            new CustomEvent("activity-added", {
+              detail: {
+                listId: data.list.id,
+                activity: {
+                  id: data.activity.id,
+                  action: data.activity.action,
+                  details: data.activity.details,
+                  createdAt: data.activity.createdAt,
+                  user: data.activity.user || {
+                    id: "",
+                    email: "",
+                  },
+                },
+              },
+            })
+          );
+        } catch {
+          // Ignore errors - unified query refetch will handle it
+        }
+      }
+
       // CRITICAL: Use centralized invalidation for consistency
       // Invalidates unified query, all lists, collections, and duplicates
+      // Unified query refetch will provide the complete activity list
       invalidateUrlQueries(queryClient, listSlug, listId, false);
 
       toast({
@@ -692,12 +774,15 @@ export function useDeleteList() {
       const deletedList = previous?.lists?.find((l) => l.id === listId);
       const listTitle = deletedList?.title || deletedList?.slug || "List";
 
-      queryClient.setQueryData(listQueryKeys.allLists(), (old: any) => {
-        if (!old?.lists) return old;
-        return {
-          lists: old.lists.filter((list: UserList) => list.id !== listId),
-        };
-      });
+      queryClient.setQueryData<{ lists: UserList[] }>(
+        listQueryKeys.allLists(),
+        (old) => {
+          if (!old?.lists) return old;
+          return {
+            lists: old.lists.filter((list) => list.id !== listId),
+          };
+        }
+      );
 
       return { previous, deletedListTitle: listTitle };
     },

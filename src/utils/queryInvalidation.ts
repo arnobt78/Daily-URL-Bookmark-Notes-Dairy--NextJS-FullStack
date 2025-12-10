@@ -16,6 +16,41 @@ import { QueryClient } from "@tanstack/react-query";
 import { listQueryKeys } from "@/hooks/useListQueries";
 
 /**
+ * Invalidate browse/public lists queries
+ * 
+ * Use this when:
+ * - List visibility changes (public/private)
+ * - Public list is created/deleted
+ * 
+ * @param queryClient - React Query client instance
+ */
+export function invalidateBrowseQueries(queryClient: QueryClient): void {
+  // Invalidate all browse/public lists queries (any page, any search)
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey;
+      return (
+        Array.isArray(key) &&
+        key[0] === "browse" &&
+        key[1] === "public"
+      );
+    },
+  });
+
+  // Also invalidate business insights that show public list counts
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey;
+      return (
+        Array.isArray(key) &&
+        key[0] === "business-insights" &&
+        (key[1] === "overview" || key[1] === "performance" || key[1] === "global")
+      );
+    },
+  });
+}
+
+/**
  * Invalidate all queries after a list change (URL added/updated/deleted, etc.)
  *
  * This ensures BOTH the unified list query and all lists query update immediately.

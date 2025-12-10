@@ -1278,6 +1278,14 @@ export function UrlList() {
     try {
       // Use updateUrlInList which will sync with server
       await updateUrlInList(id, { isFavorite: updatedUrl.isFavorite });
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // Store function already dispatches activity-added event, but we need to invalidate cache
+      if (current.slug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(current.slug),
+        });
+      }
     } catch (err) {
       // console.error("Failed to toggle favorite:", err);
       // Revert on error - use React Query invalidation to trigger unified endpoint refetch
@@ -1338,6 +1346,14 @@ export function UrlList() {
         true // isDuplicate flag - creates url_duplicated activity instead of url_added
       );
 
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // Store function already dispatches activity-added event, but we need to invalidate cache
+      if (current.slug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(current.slug),
+        });
+      }
+
       // Show success toast
       toast({
         title: "URL Duplicated",
@@ -1383,6 +1399,14 @@ export function UrlList() {
     try {
       const { archiveUrlFromList } = await import("@/stores/urlListStore");
       await archiveUrlFromList(id);
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // Store function already dispatches activity-added event, but we need to invalidate cache
+      if (current.slug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(current.slug),
+        });
+      }
 
       // Show success toast
       toast({
@@ -1443,6 +1467,14 @@ export function UrlList() {
     try {
       // Use unified PATCH endpoint which handles pin/unpin and returns activity data
       await updateUrlInList(id, { isPinned: updatedUrl.isPinned });
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // Store function already dispatches activity-added event, but we need to invalidate cache
+      if (current.slug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(current.slug),
+        });
+      }
     } catch (err) {
       // console.error("Failed to pin URL:", err);
       // Revert on error - use React Query invalidation to trigger unified endpoint refetch
@@ -2439,6 +2471,14 @@ export function UrlList() {
     try {
       const { restoreArchivedUrl } = await import("@/stores/urlListStore");
       await restoreArchivedUrl(urlId);
+
+      // CRITICAL: Invalidate unified query to trigger updates?activityLimit=30 refetch
+      // Store function already dispatches activity-added event, but we need to invalidate cache
+      if (current?.slug) {
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(current.slug),
+        });
+      }
 
       // Show success toast
       toast({
