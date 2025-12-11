@@ -131,9 +131,11 @@ export async function POST(
     });
 
     // Publish real-time update
+    // CRITICAL: Include slug in SSE event so collaborator screens can invalidate unified query
     await publishMessage(CHANNELS.listUpdate(listId), {
       type: "list_updated",
       listId: listId,
+      slug: list.slug, // CRITICAL: Include slug for query invalidation on collaborator screens
       action: "collaborator_added",
       timestamp: new Date().toISOString(),
     });
@@ -266,9 +268,11 @@ export async function PUT(
     });
 
     // Publish real-time update
+    // CRITICAL: Include slug in SSE event so collaborator screens can invalidate unified query
     await publishMessage(CHANNELS.listUpdate(id), {
       type: "list_updated",
       listId: id,
+      slug: list.slug, // CRITICAL: Include slug for query invalidation on collaborator screens
       action: "collaborator_role_updated",
       timestamp: new Date().toISOString(),
     });
@@ -355,9 +359,11 @@ export async function DELETE(
     });
 
     // Publish real-time update
+    // CRITICAL: Include slug in SSE event so collaborator screens can invalidate unified query
     await publishMessage(CHANNELS.listUpdate(listId), {
       type: "list_updated",
       listId: listId,
+      slug: list.slug, // CRITICAL: Include slug for query invalidation on collaborator screens
       action: "collaborator_removed",
       timestamp: new Date().toISOString(),
     });

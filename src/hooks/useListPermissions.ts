@@ -57,37 +57,50 @@ export function useListPermissions(): PermissionCheck {
     }
 
     // Check collaborator roles
+    // CRITICAL: Email matching must be case-insensitive to handle email casing differences
+    // (e.g., user.email might be "User@Example.com" but stored as "user@example.com")
     if (
       listData.collaboratorRoles &&
       typeof listData.collaboratorRoles === "object"
     ) {
       const roles = listData.collaboratorRoles as Record<string, string>;
-      const role = roles[user.email];
+      const userEmailLower = user.email.toLowerCase();
+      
+      // Check all keys case-insensitively
+      const matchingKey = Object.keys(roles).find(
+        (key) => key.toLowerCase() === userEmailLower
+      );
+      
+      if (matchingKey) {
+        const role = roles[matchingKey];
 
-      if (role === "editor") {
-        return {
-          canEdit: true,
-          canDelete: false, // Editors cannot delete the list itself
-          canInvite: false,
-          canComment: true,
-          role: "editor" as UserRole,
-        };
-      }
+        if (role === "editor") {
+          return {
+            canEdit: true,
+            canDelete: false, // Editors cannot delete the list itself
+            canInvite: false,
+            canComment: true,
+            role: "editor" as UserRole,
+          };
+        }
 
-      if (role === "viewer") {
-        return {
-          canEdit: false,
-          canDelete: false,
-          canInvite: false,
-          canComment: true, // Viewers can comment
-          role: "viewer" as UserRole,
-        };
+        if (role === "viewer") {
+          return {
+            canEdit: false,
+            canDelete: false,
+            canInvite: false,
+            canComment: true, // Viewers can comment
+            role: "viewer" as UserRole,
+          };
+        }
       }
     }
 
     // Fallback: Check legacy collaborators array
+    // Also use case-insensitive matching for legacy array
     if (listData.collaborators && Array.isArray(listData.collaborators)) {
-      if (listData.collaborators.includes(user.email)) {
+      const userEmailLower = user.email.toLowerCase();
+      if (listData.collaborators.some((email) => email.toLowerCase() === userEmailLower)) {
         // Legacy collaborators default to editor
         return {
           canEdit: true,

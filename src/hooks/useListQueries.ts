@@ -216,6 +216,21 @@ export function useAddCollaborator(listId: string, listSlug?: string) {
       // Invalidates unified query and all lists query
       if (listSlug) {
         invalidateCollaboratorQueries(queryClient, listSlug);
+
+        // CRITICAL: Dispatch unified-update event immediately to trigger real-time updates on collaborator screens
+        // This ensures the collaborator's UI updates immediately, just like URL mutations do
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("unified-update", {
+              detail: {
+                listId,
+                slug: listSlug,
+                action: "collaborator_added",
+                timestamp: new Date().toISOString(), // Use current timestamp to ensure it's treated as recent
+              },
+            })
+          );
+        }
       }
     },
     onError: (error, variables, context) => {
@@ -295,6 +310,39 @@ export function useUpdateCollaboratorRole(listId: string, listSlug?: string) {
       // Invalidates unified query and all lists query
       if (listSlug) {
         invalidateCollaboratorQueries(queryClient, listSlug);
+
+        // CRITICAL: Dispatch unified-update event immediately to trigger real-time updates on collaborator screens
+        // This ensures the collaborator's UI updates immediately, just like URL mutations do
+        // The event will be processed by setupSSECacheSync and trigger a refetch
+        if (typeof window !== "undefined") {
+          const updateEvent = {
+            listId,
+            slug: listSlug,
+            action: "collaborator_role_updated" as const,
+            timestamp: new Date().toISOString(), // Use current timestamp to ensure it's treated as recent
+          };
+
+          console.log(
+            `🔔 [MUTATION] Dispatching unified-update from useUpdateCollaboratorRole:`,
+            updateEvent
+          );
+
+          window.dispatchEvent(
+            new CustomEvent("unified-update", {
+              detail: updateEvent,
+            })
+          );
+
+          // CRITICAL: Also directly invalidate the unified query on the owner's screen
+          // This ensures owner's screen updates immediately (mutation already does this via invalidateCollaboratorQueries)
+          // But we need to ensure collaborator's screen also gets updated via SSE
+          console.log(
+            `🔄 [MUTATION] Invalidating unified query directly: ${listSlug}`
+          );
+          queryClient.invalidateQueries({
+            queryKey: listQueryKeys.unified(listSlug),
+          });
+        }
       }
     },
     onError: (error, variables, context) => {
@@ -368,6 +416,21 @@ export function useRemoveCollaborator(listId: string, listSlug?: string) {
       // Invalidates unified query and all lists query
       if (listSlug) {
         invalidateCollaboratorQueries(queryClient, listSlug);
+
+        // CRITICAL: Dispatch unified-update event immediately to trigger real-time updates
+        // This ensures UI updates immediately on all screens
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("unified-update", {
+              detail: {
+                listId,
+                slug: listSlug,
+                action: "collaborator_removed",
+                timestamp: new Date().toISOString(), // Use current timestamp to ensure it's treated as recent
+              },
+            })
+          );
+        }
       }
     },
     onError: (error, email, context) => {
@@ -791,13 +854,17 @@ export function useDeleteList() {
         }
       );
 
-      return { previous, deletedListTitle: listTitle, deletedListSlug: listSlug };
+      return {
+        previous,
+        deletedListTitle: listTitle,
+        deletedListSlug: listSlug,
+      };
     },
     onSuccess: (data, listId, context) => {
       // CRITICAL: Invalidate all list-related queries to ensure consistency across all pages
       // This includes user's lists page, browse/public lists page, and individual list pages
       invalidateAllListsQueries(queryClient);
-      
+
       // CRITICAL: Also invalidate browse/public lists queries to remove deleted list from browse page
       // When a list is deleted, it should disappear from both user's lists AND public browse page
       invalidateBrowseQueries(queryClient);
@@ -838,48 +905,247 @@ export function useDeleteList() {
 // ============================================
 // SSE CACHE UPDATES - Real-time sync
 // ============================================
+// CRITICAL: Singleton pattern to ensure only one listener exists globally
+// This prevents duplicate invalidations when multiple components call setupSSECacheSync
+let listenerRefCount = 0; // Track how many components are using this
+let globalInvalidationTimeout: NodeJS.Timeout | null = null;
+const globalProcessedInvocations = new Set<string>(); // Shared deduplication across all instances
+let globalSetupTime: number | null = null;
+let globalSSEConnectedTime: number | null = null; // Track when SSE actually connects
+let globalHandler: ((event: Event) => void) | null = null;
+const invalidationDelay = 300; // 300ms debounce window
+const initialLoadGracePeriod = 8000; // Ignore invalidations for 8 seconds after SSE connects (to handle slow SSE connections)
+
+/**
+ * Setup global SSE cache sync for React Query
+ *
+ * This is a singleton - only one listener will be created globally, even if called multiple times.
+ * Uses ref counting to ensure listener is only removed when last component unmounts.
+ * This prevents duplicate invalidations when multiple components mount.
+ *
+ * @returns Cleanup function
+ */
 export function setupSSECacheSync() {
-  // CRITICAL: Sync React Query cache when SSE events fire
-  // This ensures collaborators see real-time updates when owner makes changes
-  const handleUnifiedUpdate = (event: Event) => {
-    const customEvent = event as CustomEvent<{
-      listId?: string;
-      action?: string;
-      slug?: string;
-    }>;
-
-    const listId = customEvent.detail?.listId;
-    const slug = customEvent.detail?.slug;
-    const action = customEvent.detail?.action || "";
-
-    if (!listId) return;
-
-    // CRITICAL: Get slug from currentList store if not provided in event
-    // This ensures we can invalidate the unified query even if slug is missing from event
-    let listSlug = slug;
-    if (!listSlug && typeof window !== "undefined") {
-      const current = currentList.get();
-      if (current?.id === listId && current?.slug) {
-        listSlug = current.slug;
-      }
-    }
-
-    // CRITICAL: Invalidate unified query to trigger refetch
-    // This ensures collaborators see real-time updates (SSE -> unified-update event -> invalidation -> refetch)
-    if (listSlug) {
-      queryClient.invalidateQueries({
-        queryKey: listQueryKeys.unified(listSlug),
-      });
-    }
-  };
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("unified-update", handleUnifiedUpdate);
-
-    return () => {
-      window.removeEventListener("unified-update", handleUnifiedUpdate);
-    };
+  if (typeof window === "undefined") {
+    return () => {}; // Return no-op cleanup on server
   }
 
-  return () => {}; // Return cleanup function for consistency
+  // Increment ref count
+  listenerRefCount++;
+
+  // CRITICAL: Only set up listener once globally - singleton pattern
+  if (listenerRefCount === 1) {
+    globalSetupTime = Date.now();
+
+    const handleUnifiedUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        listId?: string;
+        action?: string;
+        slug?: string;
+        timestamp?: string;
+      }>;
+
+      const listId = customEvent.detail?.listId;
+      const slug = customEvent.detail?.slug;
+      const action = customEvent.detail?.action || "";
+      const eventTimestamp = customEvent.detail?.timestamp;
+
+      console.log(`📥 [SSE CACHE SYNC] Received unified-update event:`, {
+        listId,
+        slug,
+        action,
+        eventTimestamp,
+        timeSinceSSEConnect: globalSSEConnectedTime
+          ? Date.now() - globalSSEConnectedTime
+          : null,
+      });
+
+      if (!listId) {
+        console.warn(
+          `⚠️ [SSE CACHE SYNC] unified-update event missing listId, ignoring`
+        );
+        return;
+      }
+
+      // CRITICAL: For collaborator actions, check if event is recent (not historical)
+      // Only bypass grace period for recent collaborator events (within last 60 seconds)
+      // This ensures role updates are immediately reflected, but historical events are ignored
+      const isCollaboratorAction =
+        action === "collaborator_added" ||
+        action === "collaborator_role_updated" ||
+        action === "collaborator_removed";
+
+      const now = Date.now();
+      let shouldIgnoreGracePeriod = false;
+
+      if (isCollaboratorAction && eventTimestamp) {
+        // Check if event timestamp is recent (within last 60 seconds)
+        // If event is recent, it's a real-time update, not historical - process it immediately
+        try {
+          const eventTime = new Date(eventTimestamp).getTime();
+          const timeSinceEvent = now - eventTime;
+          shouldIgnoreGracePeriod = timeSinceEvent < 60000; // 60 seconds - increased to handle slower networks
+
+          if (
+            process.env.NODE_ENV === "development" &&
+            shouldIgnoreGracePeriod
+          ) {
+            console.debug(
+              `✅ [SSE CACHE SYNC] Recent collaborator action (${timeSinceEvent}ms ago) - bypassing grace period`
+            );
+          }
+        } catch (e) {
+          // Invalid timestamp - if it's a collaborator action, still treat as recent (might be from mutation)
+          shouldIgnoreGracePeriod = true;
+
+          if (process.env.NODE_ENV === "development") {
+            console.debug(
+              `✅ [SSE CACHE SYNC] Collaborator action with invalid timestamp - treating as recent, bypassing grace period`
+            );
+          }
+        }
+      } else if (isCollaboratorAction) {
+        // CRITICAL: If it's a collaborator action (with or without timestamp), ALWAYS bypass grace period
+        // This ensures collaborator role updates work immediately on all screens
+        // Events from mutations won't have timestamp, SSE events will - both should work
+        shouldIgnoreGracePeriod = true;
+
+        if (process.env.NODE_ENV === "development") {
+          console.debug(
+            `✅ [SSE CACHE SYNC] Collaborator action detected - bypassing grace period (action: ${action})`
+          );
+        }
+      }
+
+      // CRITICAL: Ignore events during initial load grace period (unless it's a recent collaborator action)
+      // Use SSE connection time (not setup time) to accurately track when historical events arrive
+      // This prevents rapid invalidations when SSE first connects and sends historical events
+      if (!shouldIgnoreGracePeriod && globalSSEConnectedTime !== null) {
+        const timeSinceSSEConnect = now - globalSSEConnectedTime;
+
+        if (timeSinceSSEConnect < initialLoadGracePeriod) {
+          console.log(
+            `⏭️ [SSE CACHE SYNC] Ignoring unified-update event during initial load grace period (${timeSinceSSEConnect}ms since SSE connect, action: ${action})`
+          );
+          return;
+        }
+      }
+
+      // CRITICAL: Get slug from currentList store if not provided in event
+      // This ensures we can invalidate the unified query even if slug is missing from event
+      let listSlug = slug;
+      if (!listSlug && typeof window !== "undefined") {
+        const current = currentList.get();
+        if (current?.id === listId && current?.slug) {
+          listSlug = current.slug;
+        }
+      }
+
+      if (!listSlug) {
+        console.warn(
+          `⚠️ [SSE CACHE SYNC] Cannot invalidate - no slug found (listId: ${listId}, slug: ${slug})`
+        );
+        return;
+      }
+
+      // CRITICAL: Create unique invocation key to prevent duplicate invalidations
+      // Use listSlug + timestamp (if available) to deduplicate rapid events
+      const invocationKey = eventTimestamp
+        ? `${listSlug}:${eventTimestamp}`
+        : `${listSlug}:${Date.now()}`;
+
+      // Skip if we've already processed this exact event recently (shared across all instances)
+      if (globalProcessedInvocations.has(invocationKey)) {
+        console.log(
+          `⏭️ [SSE CACHE SYNC] Skipping duplicate unified-update event: ${invocationKey}`
+        );
+        return;
+      }
+
+      // Add to processed set and clean up old entries (keep last 100 for better deduplication)
+      globalProcessedInvocations.add(invocationKey);
+      if (globalProcessedInvocations.size > 100) {
+        const entries = Array.from(globalProcessedInvocations);
+        globalProcessedInvocations.clear();
+        entries
+          .slice(-100)
+          .forEach((key) => globalProcessedInvocations.add(key));
+      }
+
+      // Debounce invalidation to prevent rapid-fire API calls (shared timeout across all instances)
+      // Clear existing timeout if another event comes in quickly
+      if (globalInvalidationTimeout) {
+        clearTimeout(globalInvalidationTimeout);
+      }
+
+      globalInvalidationTimeout = setTimeout(() => {
+        // CRITICAL: Invalidate unified query to trigger refetch
+        // This ensures collaborators see real-time updates (SSE -> unified-update event -> invalidation -> refetch)
+        console.log(
+          `🔄 [SSE CACHE SYNC] Invalidating unified query for: ${listSlug} (action: ${action})`
+        );
+        queryClient.invalidateQueries({
+          queryKey: listQueryKeys.unified(listSlug!),
+        });
+        globalInvalidationTimeout = null;
+        console.log(
+          `✅ [SSE CACHE SYNC] Unified query invalidated, refetch should trigger updates?activityLimit=30`
+        );
+      }, invalidationDelay);
+    };
+
+    // Store handler globally for cleanup
+    globalHandler = handleUnifiedUpdate;
+    window.addEventListener("unified-update", handleUnifiedUpdate);
+
+    // CRITICAL: Listen for SSE connection events to track when SSE actually connects
+    // This allows grace period to start from actual SSE connection time (not setup time)
+    // This prevents invalidations from historical events sent right after SSE connects
+    const handleSSEConnected = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        listId?: string;
+        timestamp?: number;
+      }>;
+
+      // Set global SSE connection time (use timestamp from event or current time)
+      if (!globalSSEConnectedTime) {
+        globalSSEConnectedTime = customEvent.detail?.timestamp || Date.now();
+        if (process.env.NODE_ENV === "development") {
+          console.debug(
+            `✅ [SSE CACHE SYNC] SSE connected, starting grace period from now`
+          );
+        }
+      }
+    };
+
+    window.addEventListener("sse-connected", handleSSEConnected);
+
+    // Store handler for cleanup
+    (globalHandler as any).__sseConnectedHandler = handleSSEConnected;
+  }
+
+  // Return cleanup function that decrements ref count
+  return () => {
+    listenerRefCount--;
+
+    // Only remove listener and cleanup when no components are using it
+    if (listenerRefCount <= 0) {
+      if (globalHandler) {
+        window.removeEventListener("unified-update", globalHandler);
+        // Also remove SSE connected listener if it exists
+        const sseHandler = (globalHandler as any).__sseConnectedHandler;
+        if (sseHandler) {
+          window.removeEventListener("sse-connected", sseHandler);
+        }
+        globalHandler = null;
+      }
+      if (globalInvalidationTimeout) {
+        clearTimeout(globalInvalidationTimeout);
+        globalInvalidationTimeout = null;
+      }
+      // Don't clear processedInvocations - keep them for deduplication
+      // Don't reset globalSetupTime or globalSSEConnectedTime - keep them for grace period tracking
+      listenerRefCount = 0; // Reset to 0 (safety)
+    }
+  };
 }

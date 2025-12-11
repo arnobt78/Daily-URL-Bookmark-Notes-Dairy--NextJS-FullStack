@@ -121,55 +121,10 @@ export function PermissionManager({
 
   // Collaborators are read directly from React Query cache (populated by unified endpoint)
 
-  // Listen for real-time role updates to refresh collaborators list and permissions
-  useEffect(() => {
-    const handleListUpdate = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        listId: string;
-        action?: string;
-      }>;
-
-      // Only handle collaborator_role_updated events for this list
-      if (
-        customEvent.detail?.listId === listId &&
-        customEvent.detail?.action === "collaborator_role_updated"
-      ) {
-        // Invalidate collaborators query to refetch with new roles
-        queryClient.invalidateQueries({
-          queryKey: listQueryKeys.collaborators(listId),
-        });
-        // The unified endpoint will update currentList store, which will trigger useListPermissions to recalculate
-      }
-    };
-
-    const handleUnifiedUpdate = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        listId?: string;
-        action?: string;
-      }>;
-
-      // Handle collaborator_role_updated from unified-update events
-      if (
-        customEvent.detail?.listId === listId &&
-        customEvent.detail?.action === "collaborator_role_updated"
-      ) {
-        if (process.env.NODE_ENV === "development") {
-        }
-        // Invalidate collaborators query to refetch with new roles
-        queryClient.invalidateQueries({
-          queryKey: listQueryKeys.collaborators(listId),
-        });
-        // The unified endpoint will update currentList store, which will trigger useListPermissions to recalculate
-      }
-    };
-
-    window.addEventListener("list-updated", handleListUpdate);
-    window.addEventListener("unified-update", handleUnifiedUpdate);
-    return () => {
-      window.removeEventListener("list-updated", handleListUpdate);
-      window.removeEventListener("unified-update", handleUnifiedUpdate);
-    };
-  }, [listId, queryClient]);
+  // CRITICAL: Collaborators cache is automatically updated via unified-collaborators-updated event
+  // The unified endpoint populates collaborators cache when it refetches (triggered by setupSSECacheSync)
+  // No need for separate invalidation here - unified query invalidation handles everything
+  // The unified-collaborators-updated event listener (above) already updates the cache reactively
 
   // Add collaborator
   const handleAddCollaborator = async () => {

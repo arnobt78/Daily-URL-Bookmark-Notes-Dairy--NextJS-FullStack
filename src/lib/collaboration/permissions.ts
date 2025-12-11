@@ -32,18 +32,33 @@ export async function getUserRole(
   if (!user || user.id !== userId) return "none";
 
   // Check collaboratorRoles first (new role-based system)
+  // CRITICAL: Email matching must be case-insensitive to handle email casing differences
+  // (e.g., user.email might be "User@Example.com" but stored as "user@example.com")
   if (list.collaboratorRoles && typeof list.collaboratorRoles === "object") {
     const roles = list.collaboratorRoles as Record<string, string>;
-    const role = roles[user.email];
-    if (role === "editor" || role === "viewer") {
-      return role;
+    const userEmailLower = user.email.toLowerCase();
+    
+    // Check all keys case-insensitively
+    const matchingKey = Object.keys(roles).find(
+      (key) => key.toLowerCase() === userEmailLower
+    );
+    
+    if (matchingKey) {
+      const role = roles[matchingKey];
+      if (role === "editor" || role === "viewer") {
+        return role;
+      }
     }
   }
 
   // Fallback: Check legacy collaborators array (for backward compatibility)
   // Convert legacy collaborators to "editor" role if found
-  if (list.collaborators && Array.isArray(list.collaborators) && list.collaborators.includes(user.email)) {
-    return "editor";
+  // Also use case-insensitive matching for legacy array
+  if (list.collaborators && Array.isArray(list.collaborators)) {
+    const userEmailLower = user.email.toLowerCase();
+    if (list.collaborators.some((email) => email.toLowerCase() === userEmailLower)) {
+      return "editor";
+    }
   }
 
   // Public list - viewer access
@@ -119,16 +134,27 @@ export async function hasListAccess(
   }
 
   // Check if user is a collaborator using new role-based system
+  // CRITICAL: Email matching must be case-insensitive to handle email casing differences
+  // (e.g., user.email might be "User@Example.com" but stored as "user@example.com")
   if (list.collaboratorRoles && typeof list.collaboratorRoles === "object") {
     const roles = list.collaboratorRoles as Record<string, string>;
-    if (roles[user.email] === "editor" || roles[user.email] === "viewer") {
+    const userEmailLower = user.email.toLowerCase();
+    
+    // Check all keys case-insensitively
+    const matchingKey = Object.keys(roles).find(
+      (key) => key.toLowerCase() === userEmailLower
+    );
+    
+    if (matchingKey && (roles[matchingKey] === "editor" || roles[matchingKey] === "viewer")) {
       return true;
     }
   }
 
   // Fallback: Check legacy collaborators array (backward compatibility)
+  // Also use case-insensitive matching for legacy array
   if (list.collaborators && Array.isArray(list.collaborators)) {
-    if (list.collaborators.includes(user.email)) {
+    const userEmailLower = user.email.toLowerCase();
+    if (list.collaborators.some((email) => email.toLowerCase() === userEmailLower)) {
       return true;
     }
   }

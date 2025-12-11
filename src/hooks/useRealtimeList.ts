@@ -128,6 +128,17 @@ export function useRealtimeList(listId: string | null) {
         setIsConnected(true);
         isConnectingRef.current = false;
         reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
+        
+        // CRITICAL: Dispatch event to notify setupSSECacheSync that SSE is connected
+        // This allows grace period to start from actual SSE connection time, not setup time
+        // This prevents invalidations from historical events sent right after connection
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("sse-connected", {
+              detail: { listId, timestamp: Date.now() },
+            })
+          );
+        }
       };
 
       eventSource.onmessage = (event) => {
@@ -148,7 +159,13 @@ export function useRealtimeList(listId: string | null) {
           // Handle different event types
           if (data.type === "connected") {
             // Connected to list updates
+            console.log(`✅ [SSE] Connected to list updates for listId: ${listId}`);
           } else if (data.type === "list_updated") {
+            console.log(`📨 [SSE] Received list_updated event:`, {
+              listId,
+              action: data.action,
+              timestamp: data.timestamp,
+            });
             // CRITICAL: Skip all real-time events during bulk import to prevent getList spam
             if (
               typeof window !== "undefined" &&
@@ -160,19 +177,51 @@ export function useRealtimeList(listId: string | null) {
               return; // Don't dispatch any events during bulk import
             }
 
-            // Skip collaborator_added and collaborator_removed - these are handled optimistically
-            // BUT allow collaborator_role_updated to trigger refresh (affects current user's permissions)
-            const isCollaboratorActionToSkip = 
+            // CRITICAL: For collaborator actions, we need to refresh the list to update permissions and UI
+            // - collaborator_added: New collaborator needs to see they have access (if already on page)
+            // - collaborator_role_updated: Collaborator whose role changed needs to see updated permissions (canEdit, etc.)
+            // - collaborator_removed: Handled via 401 check, but allow list refresh to update collaborators list
+            // All collaborator actions should trigger unified-update to ensure permissions and UI update correctly
+            const isCollaboratorAction = 
               data.action === "collaborator_added" ||
+              data.action === "collaborator_role_updated" ||
               data.action === "collaborator_removed";
             
-            if (isCollaboratorActionToSkip) {
-              // Skip dispatching list-updated event for collaborator add/remove changes
-              return;
+            // For collaborator actions, we MUST refresh to update permissions
+            // This ensures:
+            // 1. New collaborators see they have access
+            // 2. Role changes update permissions (editor/viewer toggle)
+            // 3. Collaborator list updates in UI
+            // Note: collaborator_removed also handled via 401 redirect in ListPage
+            
+            // CRITICAL: For collaborator actions, dispatch unified-update immediately with slug
+            // This ensures setupSSECacheSync can invalidate the unified query for real-time updates
+            if (isCollaboratorAction) {
+              // CRITICAL: Get slug from SSE event data first (API now includes it), fallback to store
+              // This ensures we have the slug even if currentList store doesn't have it yet
+              const slug = (data as any).slug || currentList.get()?.slug;
+              
+              if (slug) {
+                const unifiedUpdateEvent = {
+                  listId,
+                  slug, // CRITICAL: Include slug for query invalidation
+                  timestamp: data.timestamp || new Date().toISOString(),
+                  action: data.action || "list_updated",
+                };
+                
+                console.log(`🔔 [REALTIME] Dispatching unified-update for collaborator action:`, unifiedUpdateEvent);
+                
+                window.dispatchEvent(
+                  new CustomEvent("unified-update", {
+                    detail: unifiedUpdateEvent,
+                  })
+                );
+                // Return early for collaborator actions - unified-update event is dispatched above
+                return;
+              } else {
+                console.warn(`⚠️ [REALTIME] Cannot dispatch unified-update for collaborator action - no slug found (listId: ${listId}, data:`, data, `)`);
+              }
             }
-
-            // For collaborator_role_updated, we need to refresh the list to update permissions
-            // This is critical for the collaborator whose role changed to see updated UI
 
             // For url_clicked actions, update the store directly with click count
             // This ensures instant UI updates across all screens without full list refresh
@@ -253,12 +302,15 @@ export function useRealtimeList(listId: string | null) {
             const slug = current?.slug;
             
             // Dispatch unified event that will trigger the unified endpoint
+            // CRITICAL: Include timestamp for proper deduplication in setupSSECacheSync
+            // This prevents duplicate invalidations when both list_updated and activity_created events fire
             window.dispatchEvent(
               new CustomEvent("unified-update", { 
                 detail: { 
                   listId,
-                  slug, // Include slug for query invalidation
+                  slug, // CRITICAL: Include slug for query invalidation
                   action, // Include action at top level for logging/debugging
+                  timestamp: data.timestamp || new Date().toISOString(), // CRITICAL: Include timestamp for deduplication
                   activity: activityData ? {
                     id: activityData.id,
                     action: activityData.action,
