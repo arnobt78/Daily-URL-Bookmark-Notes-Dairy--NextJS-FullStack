@@ -70,9 +70,14 @@ export function useUnifiedListQuery(slug: string, enabled: boolean = true) {
       );
       if (!response.ok) {
         if (response.status === 401) {
+          // CRITICAL: Get list ID from current list store if available
+          // This ensures the event has the correct listId for matching in ListPage
+          const current = currentList.get();
+          const listId = current?.id || slug; // Fallback to slug if ID not available
+
           window.dispatchEvent(
             new CustomEvent("unified-update-unauthorized", {
-              detail: { listId: slug, slug },
+              detail: { listId, slug },
             })
           );
           return { list: null, activities: [], collaborators: [] };
@@ -215,22 +220,14 @@ export function useAddCollaborator(listId: string, listSlug?: string) {
       // CRITICAL: Use centralized invalidation for consistency
       // Invalidates unified query and all lists query
       if (listSlug) {
+        // Invalidate on owner's screen immediately
         invalidateCollaboratorQueries(queryClient, listSlug);
 
-        // CRITICAL: Dispatch unified-update event immediately to trigger real-time updates on collaborator screens
-        // This ensures the collaborator's UI updates immediately, just like URL mutations do
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("unified-update", {
-              detail: {
-                listId,
-                slug: listSlug,
-                action: "collaborator_added",
-                timestamp: new Date().toISOString(), // Use current timestamp to ensure it's treated as recent
-              },
-            })
-          );
-        }
+        // NOTE: We don't dispatch unified-update event here because:
+        // 1. Owner screen already updated via invalidateCollaboratorQueries
+        // 2. SSE will send list_updated event which will trigger unified-update on collaborator screens
+        // 3. This prevents duplicate invalidations (direct + unified-update event)
+        // The SSE event from the server is the single source of truth for real-time updates
       }
     },
     onError: (error, variables, context) => {
@@ -312,31 +309,11 @@ export function useUpdateCollaboratorRole(listId: string, listSlug?: string) {
         // Invalidate on owner's screen immediately
         invalidateCollaboratorQueries(queryClient, listSlug);
 
-        // CRITICAL: Dispatch unified-update event to trigger real-time updates on collaborator screens
-        // This ensures the collaborator's UI updates immediately via SSE
-        // NOTE: We don't invalidate again here - invalidateCollaboratorQueries already did it
-        // The unified-update event is for collaborator screens only (they'll receive it via SSE)
-        if (typeof window !== "undefined") {
-          const updateEvent = {
-            listId,
-            slug: listSlug,
-            action: "collaborator_role_updated" as const,
-            timestamp: new Date().toISOString(), // Use current timestamp to ensure it's treated as recent
-          };
-
-          console.log(
-            `🔔 [MUTATION] Dispatching unified-update from useUpdateCollaboratorRole (for collaborator screens):`,
-            updateEvent
-          );
-
-          window.dispatchEvent(
-            new CustomEvent("unified-update", {
-              detail: updateEvent,
-            })
-          );
-          // NOTE: Don't invalidate again - invalidateCollaboratorQueries already did it
-          // The unified-update event will be processed by setupSSECacheSync on collaborator screens
-        }
+        // NOTE: We don't dispatch unified-update event here because:
+        // 1. Owner screen already updated via invalidateCollaboratorQueries
+        // 2. SSE will send list_updated event which will trigger unified-update on collaborator screens
+        // 3. This prevents duplicate invalidations (direct + unified-update event)
+        // The SSE event from the server is the single source of truth for real-time updates
       }
     },
     onError: (error, variables, context) => {
@@ -409,22 +386,14 @@ export function useRemoveCollaborator(listId: string, listSlug?: string) {
       // CRITICAL: Use centralized invalidation for consistency
       // Invalidates unified query and all lists query
       if (listSlug) {
+        // Invalidate on owner's screen immediately
         invalidateCollaboratorQueries(queryClient, listSlug);
 
-        // CRITICAL: Dispatch unified-update event immediately to trigger real-time updates
-        // This ensures UI updates immediately on all screens
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("unified-update", {
-              detail: {
-                listId,
-                slug: listSlug,
-                action: "collaborator_removed",
-                timestamp: new Date().toISOString(), // Use current timestamp to ensure it's treated as recent
-              },
-            })
-          );
-        }
+        // NOTE: We don't dispatch unified-update event here because:
+        // 1. Owner screen already updated via invalidateCollaboratorQueries
+        // 2. SSE will send list_updated event which will trigger unified-update on collaborator screens
+        // 3. This prevents duplicate invalidations (direct + unified-update event)
+        // The SSE event from the server is the single source of truth for real-time updates
       }
     },
     onError: (error, email, context) => {
@@ -1061,16 +1030,30 @@ export function setupSSECacheSync() {
       }
 
       // CRITICAL: Create unique invocation key to prevent duplicate invalidations
-      // Use listSlug + action + timestamp (if available) to deduplicate rapid events
-      // Include action to prevent different actions from being deduplicated
-      const invocationKey = eventTimestamp
-        ? `${listSlug}:${action}:${eventTimestamp}`
-        : `${listSlug}:${action}:${Date.now()}`;
+      // Use listSlug + action + rounded timestamp to deduplicate events within 1 second
+      // This prevents duplicate invalidations from mutation dispatch + SSE events with slightly different timestamps
+      let invocationKey: string;
+      if (eventTimestamp) {
+        try {
+          // Round timestamp to nearest second to deduplicate events within 1 second
+          const eventTime = new Date(eventTimestamp).getTime();
+          const roundedTime = Math.floor(eventTime / 1000) * 1000; // Round to nearest second
+          invocationKey = `${listSlug}:${action}:${roundedTime}`;
+        } catch (e) {
+          // If timestamp parsing fails, use current time rounded to nearest second
+          const roundedTime = Math.floor(Date.now() / 1000) * 1000;
+          invocationKey = `${listSlug}:${action}:${roundedTime}`;
+        }
+      } else {
+        // No timestamp - use current time rounded to nearest second
+        const roundedTime = Math.floor(Date.now() / 1000) * 1000;
+        invocationKey = `${listSlug}:${action}:${roundedTime}`;
+      }
 
       // Skip if we've already processed this exact event recently (shared across all instances)
       if (globalProcessedInvocations.has(invocationKey)) {
         console.log(
-          `⏭️ [SSE CACHE SYNC] Skipping duplicate unified-update event: ${invocationKey}`
+          `⏭️ [SSE CACHE SYNC] Skipping duplicate unified-update event (deduplicated by rounded timestamp): ${invocationKey}`
         );
         return;
       }

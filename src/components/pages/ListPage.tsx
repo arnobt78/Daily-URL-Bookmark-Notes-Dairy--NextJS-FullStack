@@ -260,16 +260,20 @@ export default function ListPageClient() {
 
       if (isCollaboratorRemoved) {
         // Get collaborator email from activity details (from activity_created SSE event)
+        // If not available, we'll still track the removal event and check permissions after 401
         const activity = customEvent.detail?.activity;
         const removedEmail = activity?.details?.collaboratorEmail as string | undefined;
         const ownerEmail = activity?.user?.email as string | undefined;
 
-        // CRITICAL: Track removal if it's for current user (even if they don't have access)
-        // This allows 401 handler to show proper message even if user navigates after removal
-        if (
-          removedEmail &&
-          removedEmail.toLowerCase() === sessionUser.email.toLowerCase()
-        ) {
+        // CRITICAL: If we have the email and it matches current user, track it
+        // If we don't have email, still track the event (we'll check permissions after 401)
+        const isCurrentUser = removedEmail && 
+          removedEmail.toLowerCase() === sessionUser.email.toLowerCase();
+        
+        // Track removal event if:
+        // 1. Email matches current user, OR
+        // 2. No email provided but user currently has access (will verify after 401)
+        if (isCurrentUser || (!removedEmail && permissions.role !== "none")) {
           // Only track if user currently has access (about to lose it) or if we don't have recent removal tracked
           // This prevents overwriting recent removal tracking with stale historical events
           const hasRecentRemoval = recentCollaboratorRemovedRef.current &&
@@ -277,8 +281,9 @@ export default function ListPageClient() {
 
           if (permissions.role !== "none" || !hasRecentRemoval) {
             // Store this event info for 401 handling
+            // Use current user email if not provided in event (will be verified after 401)
             recentCollaboratorRemovedRef.current = {
-              email: removedEmail,
+              email: removedEmail || sessionUser.email,
               ownerEmail: ownerEmail || "the owner",
               timestamp: Date.now(),
             };
@@ -306,8 +311,16 @@ export default function ListPageClient() {
         slug?: string;
       }>;
 
-      // Check if this is for our list
-      if (customEvent.detail?.listId !== list.id) {
+      // CRITICAL: Check if this is for our list by comparing both listId and slug
+      // The event might have slug as listId if listId wasn't available
+      const eventListId = customEvent.detail?.listId;
+      const eventSlug = customEvent.detail?.slug;
+      const isOurList = 
+        (eventListId && eventListId === list.id) || 
+        (eventSlug && eventSlug === list.slug) ||
+        (eventListId === list.slug); // Handle case where slug is used as listId
+
+      if (!isOurList || hasRedirectedRef.current) {
         return;
       }
 
@@ -321,8 +334,7 @@ export default function ListPageClient() {
 
         // Verify this is for the current user
         if (
-          removedInfo.email.toLowerCase() === sessionUser.email.toLowerCase() &&
-          !hasRedirectedRef.current
+          removedInfo.email.toLowerCase() === sessionUser.email.toLowerCase()
         ) {
           // 401 + recent collaborator_removed event = user was definitely removed
           handleRedirect(removedInfo.ownerEmail);
@@ -330,19 +342,33 @@ export default function ListPageClient() {
         }
       }
 
-      // If no recent removal event but we get 401, still redirect (might be expired session or other issue)
-      // But only if user doesn't have access and hasn't redirected yet
-      if (permissions.role === "none" && !hasRedirectedRef.current) {
-        hasRedirectedRef.current = true;
-        toast({
-          title: "Access Denied",
-          description: "You don't have access to this list.",
-          variant: "error",
-          duration: 5000,
-        });
-        setTimeout(() => {
-          router.push("/");
-        }, 500);
+      // If no recent removal event but we get 401, check if user lost access
+      // Check unified data directly (more reliable than permissions which might not have updated yet)
+      const hasNoAccess = !unifiedData?.list || permissions.role === "none";
+
+      if (hasNoAccess) {
+        // Check if we have a recent collaborator_removed event (even without email match)
+        // This handles the case where removal was tracked but email wasn't provided
+        if (
+          recentCollaboratorRemovedRef.current &&
+          Date.now() - recentCollaboratorRemovedRef.current.timestamp < 30000 // Within last 30 seconds
+        ) {
+          // Use the tracked removal info (might not have email, but we know user was removed)
+          handleRedirect(recentCollaboratorRemovedRef.current.ownerEmail);
+        } else {
+          // No removal event tracked - generic access denied
+          // But still redirect since we got 401
+          hasRedirectedRef.current = true;
+          toast({
+            title: "Access Denied",
+            description: "You don't have access to this list.",
+            variant: "error",
+            duration: 5000,
+          });
+          setTimeout(() => {
+            router.push("/");
+          }, 500);
+        }
       }
     };
 
