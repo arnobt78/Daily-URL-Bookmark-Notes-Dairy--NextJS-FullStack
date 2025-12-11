@@ -173,7 +173,9 @@ export function invalidateCollaboratorQueries(
   queryClient: QueryClient,
   listSlug: string
 ): void {
-  // Invalidate unified query (contains collaborators)
+  // CRITICAL: Invalidate unified query (contains collaborators, permissions, activities)
+  // This is the same as invalidateUrlQueries - ensures consistent behavior
+  // When this is called, it triggers updates?activityLimit=30 refetch
   queryClient.invalidateQueries({
     queryKey: listQueryKeys.unified(listSlug),
   });
@@ -181,6 +183,15 @@ export function invalidateCollaboratorQueries(
   // Invalidate all lists query (for lists page - shows collaborator count)
   queryClient.invalidateQueries({
     queryKey: listQueryKeys.allLists(),
+  });
+  
+  // CRITICAL: Also invalidate collaborators query if it exists
+  // This ensures collaborator lists update immediately
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey;
+      return Array.isArray(key) && key[0] === "lists" && key.includes("collaborators");
+    },
   });
 }
 

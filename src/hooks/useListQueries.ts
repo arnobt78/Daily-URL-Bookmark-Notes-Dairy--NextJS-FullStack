@@ -309,11 +309,13 @@ export function useUpdateCollaboratorRole(listId: string, listSlug?: string) {
       // CRITICAL: Use centralized invalidation for consistency
       // Invalidates unified query and all lists query
       if (listSlug) {
+        // Invalidate on owner's screen immediately
         invalidateCollaboratorQueries(queryClient, listSlug);
 
-        // CRITICAL: Dispatch unified-update event immediately to trigger real-time updates on collaborator screens
-        // This ensures the collaborator's UI updates immediately, just like URL mutations do
-        // The event will be processed by setupSSECacheSync and trigger a refetch
+        // CRITICAL: Dispatch unified-update event to trigger real-time updates on collaborator screens
+        // This ensures the collaborator's UI updates immediately via SSE
+        // NOTE: We don't invalidate again here - invalidateCollaboratorQueries already did it
+        // The unified-update event is for collaborator screens only (they'll receive it via SSE)
         if (typeof window !== "undefined") {
           const updateEvent = {
             listId,
@@ -323,7 +325,7 @@ export function useUpdateCollaboratorRole(listId: string, listSlug?: string) {
           };
 
           console.log(
-            `🔔 [MUTATION] Dispatching unified-update from useUpdateCollaboratorRole:`,
+            `🔔 [MUTATION] Dispatching unified-update from useUpdateCollaboratorRole (for collaborator screens):`,
             updateEvent
           );
 
@@ -332,16 +334,8 @@ export function useUpdateCollaboratorRole(listId: string, listSlug?: string) {
               detail: updateEvent,
             })
           );
-
-          // CRITICAL: Also directly invalidate the unified query on the owner's screen
-          // This ensures owner's screen updates immediately (mutation already does this via invalidateCollaboratorQueries)
-          // But we need to ensure collaborator's screen also gets updated via SSE
-          console.log(
-            `🔄 [MUTATION] Invalidating unified query directly: ${listSlug}`
-          );
-          queryClient.invalidateQueries({
-            queryKey: listQueryKeys.unified(listSlug),
-          });
+          // NOTE: Don't invalidate again - invalidateCollaboratorQueries already did it
+          // The unified-update event will be processed by setupSSECacheSync on collaborator screens
         }
       }
     },
@@ -950,14 +944,19 @@ export function setupSSECacheSync() {
       const action = customEvent.detail?.action || "";
       const eventTimestamp = customEvent.detail?.timestamp;
 
+      const timeSinceSSEConnect = globalSSEConnectedTime
+        ? Date.now() - globalSSEConnectedTime
+        : null;
       console.log(`📥 [SSE CACHE SYNC] Received unified-update event:`, {
         listId,
         slug,
         action,
         eventTimestamp,
-        timeSinceSSEConnect: globalSSEConnectedTime
-          ? Date.now() - globalSSEConnectedTime
-          : null,
+        timeSinceSSEConnect,
+        isCollaboratorAction:
+          action === "collaborator_added" ||
+          action === "collaborator_role_updated" ||
+          action === "collaborator_removed",
       });
 
       if (!listId) {
@@ -978,41 +977,54 @@ export function setupSSECacheSync() {
       const now = Date.now();
       let shouldIgnoreGracePeriod = false;
 
-      if (isCollaboratorAction && eventTimestamp) {
-        // Check if event timestamp is recent (within last 60 seconds)
-        // If event is recent, it's a real-time update, not historical - process it immediately
-        try {
-          const eventTime = new Date(eventTimestamp).getTime();
-          const timeSinceEvent = now - eventTime;
-          shouldIgnoreGracePeriod = timeSinceEvent < 60000; // 60 seconds - increased to handle slower networks
+      if (isCollaboratorAction) {
+        // CRITICAL: For collaborator actions, check if event is recent based on timestamp
+        // If event timestamp is recent (within last 60 seconds), it's a real-time update - process immediately
+        // If no timestamp or old timestamp, check if we're still in grace period
+        if (eventTimestamp) {
+          try {
+            const eventTime = new Date(eventTimestamp).getTime();
+            const timeSinceEvent = now - eventTime;
 
-          if (
-            process.env.NODE_ENV === "development" &&
-            shouldIgnoreGracePeriod
-          ) {
-            console.debug(
-              `✅ [SSE CACHE SYNC] Recent collaborator action (${timeSinceEvent}ms ago) - bypassing grace period`
+            // If event is recent (within last 60 seconds), it's real-time - bypass grace period
+            if (timeSinceEvent < 60000) {
+              shouldIgnoreGracePeriod = true;
+              console.log(
+                `✅ [SSE CACHE SYNC] Recent collaborator action (${timeSinceEvent}ms ago, ${Math.round(
+                  timeSinceEvent / 1000
+                )}s) - bypassing grace period (action: ${action})`
+              );
+            } else {
+              // Event is old (historical) - only bypass grace period if we're past the grace period
+              // This prevents processing historical events during initial load
+              if (globalSSEConnectedTime !== null) {
+                const timeSinceSSEConnect = now - globalSSEConnectedTime;
+                if (timeSinceSSEConnect >= initialLoadGracePeriod) {
+                  // Past grace period, safe to process even old events
+                  shouldIgnoreGracePeriod = true;
+                  console.log(
+                    `✅ [SSE CACHE SYNC] Historical collaborator action but past grace period (${timeSinceSSEConnect}ms since SSE connect) - processing (action: ${action})`
+                  );
+                } else {
+                  // Still in grace period and event is old - ignore it
+                  console.log(
+                    `⏭️ [SSE CACHE SYNC] Historical collaborator action during grace period (${timeSinceEvent}ms old, ${timeSinceSSEConnect}ms since SSE connect) - ignoring (action: ${action})`
+                  );
+                }
+              }
+            }
+          } catch (e) {
+            // Invalid timestamp - treat as recent collaborator action (might be from mutation)
+            shouldIgnoreGracePeriod = true;
+            console.log(
+              `✅ [SSE CACHE SYNC] Collaborator action with invalid timestamp - treating as recent, bypassing grace period (action: ${action})`
             );
           }
-        } catch (e) {
-          // Invalid timestamp - if it's a collaborator action, still treat as recent (might be from mutation)
+        } else {
+          // No timestamp - treat as recent collaborator action (likely from mutation dispatch)
           shouldIgnoreGracePeriod = true;
-
-          if (process.env.NODE_ENV === "development") {
-            console.debug(
-              `✅ [SSE CACHE SYNC] Collaborator action with invalid timestamp - treating as recent, bypassing grace period`
-            );
-          }
-        }
-      } else if (isCollaboratorAction) {
-        // CRITICAL: If it's a collaborator action (with or without timestamp), ALWAYS bypass grace period
-        // This ensures collaborator role updates work immediately on all screens
-        // Events from mutations won't have timestamp, SSE events will - both should work
-        shouldIgnoreGracePeriod = true;
-
-        if (process.env.NODE_ENV === "development") {
-          console.debug(
-            `✅ [SSE CACHE SYNC] Collaborator action detected - bypassing grace period (action: ${action})`
+          console.log(
+            `✅ [SSE CACHE SYNC] Collaborator action without timestamp - treating as recent, bypassing grace period (action: ${action})`
           );
         }
       }
@@ -1049,10 +1061,11 @@ export function setupSSECacheSync() {
       }
 
       // CRITICAL: Create unique invocation key to prevent duplicate invalidations
-      // Use listSlug + timestamp (if available) to deduplicate rapid events
+      // Use listSlug + action + timestamp (if available) to deduplicate rapid events
+      // Include action to prevent different actions from being deduplicated
       const invocationKey = eventTimestamp
-        ? `${listSlug}:${eventTimestamp}`
-        : `${listSlug}:${Date.now()}`;
+        ? `${listSlug}:${action}:${eventTimestamp}`
+        : `${listSlug}:${action}:${Date.now()}`;
 
       // Skip if we've already processed this exact event recently (shared across all instances)
       if (globalProcessedInvocations.has(invocationKey)) {

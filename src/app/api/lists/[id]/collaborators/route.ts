@@ -268,19 +268,21 @@ export async function PUT(
     });
 
     // Publish real-time update
-    // CRITICAL: Include slug in SSE event so collaborator screens can invalidate unified query
-    await publishMessage(CHANNELS.listUpdate(id), {
+    // CRITICAL: Use listId (UUID) for channel, not slug - SSE subscribes using UUID
+    // Include slug in SSE event data so collaborator screens can invalidate unified query
+    await publishMessage(CHANNELS.listUpdate(listId), {
       type: "list_updated",
-      listId: id,
-      slug: list.slug, // CRITICAL: Include slug for query invalidation on collaborator screens
+      listId: listId, // Use UUID, not slug
+      slug: list.slug, // CRITICAL: Include slug in event data for query invalidation on collaborator screens
       action: "collaborator_role_updated",
       timestamp: new Date().toISOString(),
     });
 
     // Publish activity update
-    await publishMessage(CHANNELS.listActivity(id), {
+    // CRITICAL: Use listId (UUID) for channel, not slug
+    await publishMessage(CHANNELS.listActivity(listId), {
       type: "activity_created",
-      listId: id,
+      listId: listId, // Use UUID, not slug
       action: "collaborator_role_updated",
       timestamp: new Date().toISOString(),
       activity: {
