@@ -137,7 +137,7 @@ A production-ready, full-stack URL bookmarking and sharing platform built with N
 
 - **Next.js API Routes** - Serverless API endpoints
 - **Prisma 6.19.0** - Database ORM
-- **PostgreSQL** - Primary database (Neon)
+- **PostgreSQL** - Primary database (Supabase)
 - **Upstash Redis** - Caching and real-time features
 - **Upstash Vector** - Vector database for semantic search
 - **QStash** - Scheduled jobs and background tasks
@@ -261,8 +261,8 @@ daily-urlist/
    # Generate Prisma Client
    npm run db:generate
 
-   # Run database migrations
-   npm run db:migrate
+   # Push schema to database (creates tables)
+   npx prisma db push
    ```
 
 5. **Start Development Server**
@@ -286,8 +286,12 @@ Create a `.env.local` file in the root directory with the following variables:
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 # For production: https://your-domain.com
 
-# Database Configuration (PostgreSQL)
-DATABASE_URL="postgresql://user:password@host:port/database?sslmode=require"
+# Database Configuration (PostgreSQL - Supabase)
+# Transaction Pooler for regular app queries (port 6543)
+DATABASE_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-1-eu-central-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+# Direct connection for Prisma migrations (port 5432)
+DIRECT_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-1-eu-central-1.pooler.supabase.com:5432/postgres"
 
 # Session Secret
 NEXTAUTH_SECRET=your-secret-key-here-change-in-production
@@ -336,9 +340,16 @@ HUGGING_FACE_INFERENCE_API_KEY=your-huggingface-api-key
 
 #### Database (Required)
 
-- **`DATABASE_URL`**: PostgreSQL connection string
-  - Format: `postgresql://user:password@host:port/database?sslmode=require`
-  - Get from: Neon, Supabase, or your PostgreSQL provider
+- **`DATABASE_URL`**: PostgreSQL connection string (Transaction Pooler for app queries)
+
+  - For Supabase: `postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:6543/postgres?pgbouncer=true`
+  - For other providers: `postgresql://user:password@host:port/database?sslmode=require`
+  - Get from: Supabase, Neon, or your PostgreSQL provider
+
+- **`DIRECT_URL`**: Direct database connection (required for Prisma migrations with Supabase)
+  - For Supabase: `postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres`
+  - Used by Prisma for schema migrations (DDL operations)
+  - **Note**: If using Supabase, both `DATABASE_URL` and `DIRECT_URL` are required.
 
 #### Email (Optional but Recommended)
 
