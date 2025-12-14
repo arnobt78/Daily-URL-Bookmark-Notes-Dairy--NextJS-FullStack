@@ -62,3 +62,4 @@ db-data
 # Uncomment below if you want to ignore them:
 DEVELOPMENT_RULES.md
 PLAN_PROJECT.md
+NEONDB_TO_SUPABASE_MIGRATION_GUIDE.md
