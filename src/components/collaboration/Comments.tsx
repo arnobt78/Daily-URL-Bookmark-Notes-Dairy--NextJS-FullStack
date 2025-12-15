@@ -419,11 +419,11 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* Comments Header */}
       <div className="flex items-center gap-2">
-        <MessageSquare className="w-4 h-4 text-white/70" />
-        <h3 className="text-sm font-medium text-white/90">
+        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/70" />
+        <h3 className="text-xs sm:text-sm font-medium text-white/90">
           Comments ({comments.length})
         </h3>
       </div>
@@ -435,14 +435,14 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             placeholder="Add a comment..."
-            className="min-h-[80px] resize-none bg-white/5 border-white/10 text-white placeholder:text-white/50"
+            className="min-h-[70px] sm:min-h-[80px] resize-none bg-white/5 border-white/10 text-white placeholder:text-white/50 text-sm"
             disabled={createMutation.isPending}
           />
           <div className="flex justify-end">
             <Button
               type="submit"
               disabled={!newComment.trim() || createMutation.isPending}
-              className="px-4 py-1.5 text-xs"
+              className="px-3 sm:px-4 py-1.5 text-xs"
             >
               {createMutation.isPending ? "Posting..." : "Post Comment"}
             </Button>
@@ -451,13 +451,13 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
       )}
 
       {/* Comments List */}
-      <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
+      <div className="space-y-2 sm:space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
         {isLoading ? (
-          <div className="text-sm text-white/50 text-center py-4">
+          <div className="text-xs sm:text-sm text-white/50 text-center py-3 sm:py-4">
             Loading comments...
           </div>
         ) : comments.length === 0 ? (
-          <div className="text-sm text-white/50 text-center py-4">
+          <div className="text-xs sm:text-sm text-white/50 text-center py-3 sm:py-4">
             No comments yet. Be the first to comment!
           </div>
         ) : (
@@ -468,21 +468,21 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
             return (
               <div
                 key={comment.id}
-                className="bg-white/5 rounded-lg p-3 border border-white/10"
+                className="bg-white/5 rounded-lg p-2.5 sm:p-3 border border-white/10"
               >
                 {isEditing ? (
                   <div className="space-y-2">
                     <Textarea
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
-                      className="min-h-[80px] resize-none bg-white/5 border-white/10 text-white placeholder:text-white/50"
+                      className="min-h-[70px] sm:min-h-[80px] resize-none bg-white/5 border-white/10 text-white placeholder:text-white/50 text-sm"
                     />
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-1.5 sm:gap-2">
                       <Button
                         type="button"
                         onClick={handleCancelEdit}
                         variant="secondary"
-                        className="px-3 py-1 text-xs"
+                        className="px-2.5 sm:px-3 py-1 text-xs"
                       >
                         <X className="w-3 h-3 mr-1" />
                         Cancel
@@ -491,7 +491,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
                         type="button"
                         onClick={handleSaveEdit}
                         disabled={updateMutation.isPending}
-                        className="px-3 py-1 text-xs"
+                        className="px-2.5 sm:px-3 py-1 text-xs"
                       >
                         <Check className="w-3 h-3 mr-1" />
                         {updateMutation.isPending ? "Saving..." : "Save"}
@@ -500,7 +500,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-medium text-white/90 truncate">
                           {comment.user.email}
@@ -515,7 +515,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
                           <button
                             type="button"
                             onClick={() => handleStartEdit(comment)}
-                            className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                            className="p-1 sm:p-1.5 rounded hover:bg-white/10 transition-colors"
                             title="Edit comment"
                           >
                             <Edit2 className="w-3 h-3 text-white/70" />
@@ -523,7 +523,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
                           <button
                             type="button"
                             onClick={() => handleDeleteClick(comment.id)}
-                            className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                            className="p-1 sm:p-1.5 rounded hover:bg-white/10 transition-colors"
                             title="Delete comment"
                           >
                             <Trash2 className="w-3 h-3 text-red-400/70" />
@@ -531,7 +531,7 @@ export function Comments({ listId, urlId, currentUserId }: CommentsProps) {
                         </div>
                       )}
                     </div>
-                    <div className="text-sm text-white/80 whitespace-pre-wrap break-words">
+                    <div className="text-xs sm:text-sm text-white/80 whitespace-pre-wrap break-words">
                       {comment.content}
                     </div>
                   </>

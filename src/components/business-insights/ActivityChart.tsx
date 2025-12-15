@@ -101,7 +101,7 @@ export function ActivityChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Activity Timeline</CardTitle>
+        <CardTitle className="text-sm sm:text-base">Activity Timeline</CardTitle>
       </CardHeader>
       <CardContent>
         <Tabs
@@ -111,10 +111,10 @@ export function ActivityChart({
             setActiveTab(value);
           }}
         >
-          <TabsList className="mb-4">
-            <TabsTrigger value="7">7 Days</TabsTrigger>
-            <TabsTrigger value="30">30 Days</TabsTrigger>
-            <TabsTrigger value="90">90 Days</TabsTrigger>
+          <TabsList className="mb-4 grid grid-cols-3 gap-1 sm:gap-2">
+            <TabsTrigger value="7" className="text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2">7 Days</TabsTrigger>
+            <TabsTrigger value="30" className="text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2">30 Days</TabsTrigger>
+            <TabsTrigger value="90" className="text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2">90 Days</TabsTrigger>
           </TabsList>
           <TabsContent value="7" className="mt-0">
             <div
@@ -127,53 +127,14 @@ export function ActivityChart({
                   <XAxis
                     dataKey="date"
                     stroke="#ffffff60"
-                    style={{ fontSize: "12px" }}
+                    style={{ fontSize: "10px" }}
+                    className="text-[10px] sm:text-xs"
                   />
-                  <YAxis stroke="#ffffff60" style={{ fontSize: "12px" }} />
+                  <YAxis stroke="#ffffff60" style={{ fontSize: "10px" }} className="text-[10px] sm:text-xs" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend
-                    wrapperStyle={{ color: "#ffffff60", fontSize: "12px" }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="lists"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={{ fill: "#3b82f6", r: 4 }}
-                    name="Lists Created"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="urls"
-                    stroke="#a855f7"
-                    strokeWidth={2}
-                    dot={{ fill: "#a855f7", r: 4 }}
-                    name="URLs Added"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </TabsContent>
-          <TabsContent value="30" className="mt-0">
-            <div
-              className="h-64 w-full min-h-[256px]"
-              style={{ minHeight: "256px" }}
-            >
-              <ResponsiveContainer width="100%" height={256}>
-                <LineChart data={formattedData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#ffffff60"
-                    style={{ fontSize: "12px" }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis stroke="#ffffff60" style={{ fontSize: "12px" }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    wrapperStyle={{ color: "#ffffff60", fontSize: "12px" }}
+                    wrapperStyle={{ color: "#ffffff60", fontSize: "10px" }}
+                    className="text-[10px] sm:text-xs"
                   />
                   <Line
                     type="monotone"
@@ -195,6 +156,50 @@ export function ActivityChart({
               </ResponsiveContainer>
             </div>
           </TabsContent>
+          <TabsContent value="30" className="mt-0">
+            <div
+              className="h-64 w-full min-h-[256px]"
+              style={{ minHeight: "256px" }}
+            >
+              <ResponsiveContainer width="100%" height={256}>
+                <LineChart data={formattedData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#ffffff60"
+                    style={{ fontSize: "10px" }}
+                    className="text-[10px] sm:text-xs"
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis stroke="#ffffff60" style={{ fontSize: "10px" }} className="text-[10px] sm:text-xs" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend
+                    wrapperStyle={{ color: "#ffffff60", fontSize: "10px" }}
+                    className="text-[10px] sm:text-xs"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="lists"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dot={{ fill: "#3b82f6", r: 2.5 }}
+                    name="Lists Created"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="urls"
+                    stroke="#a855f7"
+                    strokeWidth={2}
+                    dot={{ fill: "#a855f7", r: 2.5 }}
+                    name="URLs Added"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </TabsContent>
           <TabsContent value="90" className="mt-0">
             <div
               className="h-64 w-full min-h-[256px]"
@@ -206,15 +211,18 @@ export function ActivityChart({
                   <XAxis
                     dataKey="date"
                     stroke="#ffffff60"
-                    style={{ fontSize: "12px" }}
+                    style={{ fontSize: "10px" }}
+                    className="text-[10px] sm:text-xs"
                     angle={-45}
                     textAnchor="end"
                     height={60}
+                    interval="preserveStartEnd"
                   />
-                  <YAxis stroke="#ffffff60" style={{ fontSize: "12px" }} />
+                  <YAxis stroke="#ffffff60" style={{ fontSize: "10px" }} className="text-[10px] sm:text-xs" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend
-                    wrapperStyle={{ color: "#ffffff60", fontSize: "12px" }}
+                    wrapperStyle={{ color: "#ffffff60", fontSize: "10px" }}
+                    className="text-[10px] sm:text-xs"
                   />
                   <Line
                     type="monotone"

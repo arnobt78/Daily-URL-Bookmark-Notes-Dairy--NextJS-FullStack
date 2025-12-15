@@ -393,7 +393,7 @@ export default function ApiDocsPage() {
 
       {/* API Endpoints by Category */}
       <Tabs defaultValue="Authentication" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4 sm:mb-6 gap-1 sm:gap-2">
+        <TabsList className="grid w-full grid-cols-4 mb-4 sm:mb-6 gap-1 sm:gap-2">
           <TabsTrigger
             value="Authentication"
             className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"

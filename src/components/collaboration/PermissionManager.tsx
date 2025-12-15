@@ -19,11 +19,11 @@ import {
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useListPermissions } from "@/hooks/useListPermissions";
-import { 
-  useAddCollaborator, 
-  useUpdateCollaboratorRole, 
+import {
+  useAddCollaborator,
+  useUpdateCollaboratorRole,
   useRemoveCollaborator,
-  listQueryKeys 
+  listQueryKeys,
 } from "@/hooks/useListQueries";
 
 export interface Collaborator {
@@ -63,7 +63,7 @@ export function PermissionManager({
   const [expandedCollaborator, setExpandedCollaborator] = useState<
     string | null
   >(null);
-  
+
   // Use React Query mutations
   const addCollaboratorMutation = useAddCollaborator(listId, listSlug);
   const updateRoleMutation = useUpdateCollaboratorRole(listId, listSlug);
@@ -72,12 +72,12 @@ export function PermissionManager({
   // Read collaborators directly from React Query cache (populated by unified endpoint)
   // Unified endpoint populates cache automatically, SSE events handle real-time updates
   const collaborators = (() => {
-    const cached = queryClient.getQueryData<{ collaborators: Array<{ email: string; role: string }> }>(
-      listQueryKeys.collaborators(listId)
-    );
+    const cached = queryClient.getQueryData<{
+      collaborators: Array<{ email: string; role: string }>;
+    }>(listQueryKeys.collaborators(listId));
     return cached?.collaborators || [];
   })();
-  
+
   const isLoading = false; // No separate loading state needed - unified query handles it
 
   // Listen for collaborators from unified endpoint (real-time updates via SSE)
@@ -87,16 +87,18 @@ export function PermissionManager({
         listId: string;
         collaborators: Collaborator[];
       }>;
-      
+
       const eventListId = customEvent.detail?.listId;
       const eventCollaborators = customEvent.detail?.collaborators;
-      
+
       if (eventListId === listId && Array.isArray(eventCollaborators)) {
         // Deduplicate collaborators by email (case-insensitive)
         const uniqueCollaborators = eventCollaborators.reduce<Collaborator[]>(
           (acc, collaborator) => {
             const emailLower = collaborator.email.toLowerCase();
-            const exists = acc.some((c) => c.email.toLowerCase() === emailLower);
+            const exists = acc.some(
+              (c) => c.email.toLowerCase() === emailLower
+            );
             if (!exists) {
               acc.push(collaborator);
             }
@@ -104,18 +106,24 @@ export function PermissionManager({
           },
           []
         );
-        
+
         queryClient.setQueryData<{ collaborators: Collaborator[] }>(
           listQueryKeys.collaborators(listId),
           { collaborators: uniqueCollaborators }
         );
       }
     };
-    
-    window.addEventListener("unified-collaborators-updated", handleUnifiedCollaborators);
-    
+
+    window.addEventListener(
+      "unified-collaborators-updated",
+      handleUnifiedCollaborators
+    );
+
     return () => {
-      window.removeEventListener("unified-collaborators-updated", handleUnifiedCollaborators);
+      window.removeEventListener(
+        "unified-collaborators-updated",
+        handleUnifiedCollaborators
+      );
     };
   }, [listId, queryClient]);
 
@@ -147,7 +155,7 @@ export function PermissionManager({
       });
       return;
     }
-    
+
     // Use React Query mutation (handles optimistic updates, rollback, and toasts automatically)
     addCollaboratorMutation.mutate(
       { email: newEmail.trim(), role: newRole },
@@ -172,13 +180,16 @@ export function PermissionManager({
       { email: emailToUpdate, role: newRole },
       {
         onSuccess: () => {
-          setRoleChangeDialog({ open: false, email: "", currentRole: "editor" });
+          setRoleChangeDialog({
+            open: false,
+            email: "",
+            currentRole: "editor",
+          });
           onUpdate?.();
         },
       }
     );
   };
-
 
   // Remove collaborator
   const handleRemoveCollaborator = async () => {
@@ -187,18 +198,14 @@ export function PermissionManager({
     const emailToDelete = deleteDialog.email;
 
     // Use React Query mutation (handles optimistic updates, rollback, and toasts automatically)
-    removeCollaboratorMutation.mutate(
-      emailToDelete,
-      {
-        onSuccess: () => {
-          setDeleteDialog({ open: false, email: "" });
-          setExpandedCollaborator(null);
-          onUpdate?.();
-        },
-      }
-    );
+    removeCollaboratorMutation.mutate(emailToDelete, {
+      onSuccess: () => {
+        setDeleteDialog({ open: false, email: "" });
+        setExpandedCollaborator(null);
+        onUpdate?.();
+      },
+    });
   };
-
 
   const getRoleIcon = (role: "editor" | "viewer") => {
     return role === "editor" ? (
@@ -220,7 +227,9 @@ export function PermissionManager({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-          <h3 className="text-base sm:text-lg font-semibold text-white">Collaborators</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-white">
+            Collaborators
+          </h3>
           {collaborators.length > 0 && (
             <Badge
               variant="secondary"
@@ -255,7 +264,9 @@ export function PermissionManager({
       ) : collaborators.length === 0 ? (
         <div className="text-center py-6 sm:py-8">
           <UserPlus className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 text-white/40" />
-          <p className="text-sm sm:text-base text-white/70">No collaborators yet</p>
+          <p className="text-sm sm:text-base text-white/70">
+            No collaborators yet
+          </p>
           <p className="text-xs sm:text-sm mt-1 text-white/50 px-2">
             Invite others to collaborate on this list
           </p>
@@ -266,61 +277,44 @@ export function PermissionManager({
           {(collaborators as Collaborator[])
             .reduce<Collaborator[]>((acc, collaborator) => {
               const emailLower = collaborator.email.toLowerCase();
-              const exists = acc.some((c) => c.email.toLowerCase() === emailLower);
+              const exists = acc.some(
+                (c) => c.email.toLowerCase() === emailLower
+              );
               if (!exists) {
                 acc.push(collaborator);
               }
               return acc;
             }, [])
             .map((collaborator, index) => (
-            <div
-              key={`${collaborator.email.toLowerCase()}-${index}`}
-              className="bg-white/5 border border-white/10 rounded-lg p-3 sm:p-4 hover:bg-white/10 transition-colors"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
-                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                  <div className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-purple-500/30 to-blue-500/30 border border-purple-400/50 flex items-center justify-center">
-                    <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-purple-200" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm sm:text-base text-white font-medium truncate">
-                      {collaborator.email}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div
-                        className={`${getRoleBadgeColor(
-                          collaborator.role
-                        )} inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border`}
-                      >
-                        {getRoleIcon(collaborator.role)}
-                        <span className="capitalize">{collaborator.role}</span>
+              <div
+                key={`${collaborator.email.toLowerCase()}-${index}`}
+                className="bg-white/5 border border-white/10 rounded-lg p-3 sm:p-4 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-2 sm:gap-0">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-purple-500/30 to-blue-500/30 border border-purple-400/50 flex items-center justify-center">
+                      <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-purple-200" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm sm:text-base text-white font-medium truncate">
+                        {collaborator.email}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div
+                          className={`${getRoleBadgeColor(
+                            collaborator.role
+                          )} inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border`}
+                        >
+                          {getRoleIcon(collaborator.role)}
+                          <span className="capitalize">
+                            {collaborator.role}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 flex-wrap">
-                  {expandedCollaborator === collaborator.email ? (
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={!canInvite}
-                        onClick={() => {
-                          if (!canInvite) return; // Prevent action if disabled
-                          setRoleChangeDialog({
-                            open: true,
-                            email: collaborator.email,
-                            currentRole: collaborator.role,
-                          });
-                        }}
-                        className={`text-xs hover:text-white hover:bg-white/10 ${
-                          !canInvite
-                            ? "text-white/40 cursor-not-allowed opacity-50"
-                            : "text-white/80"
-                        }`}
-                      >
-                        Change Role
-                      </Button>
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                    {expandedCollaborator === collaborator.email ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -329,70 +323,69 @@ export function PermissionManager({
                       >
                         <X className="h-4 w-4" />
                       </Button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setExpandedCollaborator(collaborator.email)
-                        }
-                        className="text-white/80 hover:text-white hover:bg-white/10"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="relative">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setExpandedCollaborator(collaborator.email)
+                          }
+                          className="text-white/80 hover:text-white hover:bg-white/10"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {expandedCollaborator === collaborator.email && (
+                  <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canInvite}
+                      onClick={() => {
+                        if (!canInvite) return; // Prevent action if disabled
+                        setRoleChangeDialog({
+                          open: true,
+                          email: collaborator.email,
+                          currentRole: collaborator.role,
+                        });
+                      }}
+                      className={`text-xs hover:text-white hover:bg-white/10 ${
+                        !canInvite
+                          ? "text-white/40 cursor-not-allowed opacity-50"
+                          : "text-white/80"
+                      }`}
+                    >
+                      <Edit3 className="h-3 w-3 mr-1" />
+                      Change Role
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canInvite}
+                      onClick={() => {
+                        if (!canInvite) return; // Prevent action if disabled
+                        setDeleteDialog({
+                          open: true,
+                          email: collaborator.email,
+                        });
+                      }}
+                      className={`text-xs hover:bg-red-500/10 ${
+                        !canInvite
+                          ? "text-red-400/40 cursor-not-allowed opacity-50"
+                          : "text-red-400 hover:text-red-300"
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Remove
+                    </Button>
+                  </div>
+                )}
               </div>
-              {expandedCollaborator === collaborator.email && (
-                <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!canInvite}
-                    onClick={() => {
-                      if (!canInvite) return; // Prevent action if disabled
-                      setRoleChangeDialog({
-                        open: true,
-                        email: collaborator.email,
-                        currentRole: collaborator.role,
-                      });
-                    }}
-                    className={`text-xs hover:text-white hover:bg-white/10 ${
-                      !canInvite
-                        ? "text-white/40 cursor-not-allowed opacity-50"
-                        : "text-white/80"
-                    }`}
-                  >
-                    <Edit3 className="h-3 w-3 mr-1" />
-                    Change Role
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!canInvite}
-                    onClick={() => {
-                      if (!canInvite) return; // Prevent action if disabled
-                      setDeleteDialog({
-                        open: true,
-                        email: collaborator.email,
-                      });
-                    }}
-                    className={`text-xs hover:bg-red-500/10 ${
-                      !canInvite
-                        ? "text-red-400/40 cursor-not-allowed opacity-50"
-                        : "text-red-400 hover:text-red-300"
-                    }`}
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    Remove
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
@@ -446,7 +439,11 @@ export function PermissionManager({
                       disabled={addCollaboratorMutation.isPending}
                       className="w-full"
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && newEmail.trim() && !addCollaboratorMutation.isPending) {
+                        if (
+                          e.key === "Enter" &&
+                          newEmail.trim() &&
+                          !addCollaboratorMutation.isPending
+                        ) {
                           handleAddCollaborator();
                         }
                       }}
@@ -509,11 +506,15 @@ export function PermissionManager({
                     <Button
                       type="button"
                       onClick={handleAddCollaborator}
-                      disabled={addCollaboratorMutation.isPending || !newEmail.trim()}
+                      disabled={
+                        addCollaboratorMutation.isPending || !newEmail.trim()
+                      }
                       isLoading={addCollaboratorMutation.isPending}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
                     >
-                      {addCollaboratorMutation.isPending ? "Sending..." : "Send Invite"}
+                      {addCollaboratorMutation.isPending
+                        ? "Sending..."
+                        : "Send Invite"}
                     </Button>
                   </div>
                 </div>
@@ -537,7 +538,7 @@ export function PermissionManager({
                     })
                   }
                   className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
-                      disabled={updateRoleMutation.isPending}
+                  disabled={updateRoleMutation.isPending}
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -558,7 +559,7 @@ export function PermissionManager({
                         currentRole: "editor",
                       })
                     }
-                      disabled={updateRoleMutation.isPending}
+                    disabled={updateRoleMutation.isPending}
                     className={`flex-1 p-3 rounded-lg border transition-colors ${
                       roleChangeDialog.currentRole === "editor"
                         ? "bg-purple-500/30 border-purple-400/50 text-purple-200"
@@ -579,7 +580,7 @@ export function PermissionManager({
                         currentRole: "viewer",
                       })
                     }
-                      disabled={updateRoleMutation.isPending}
+                    disabled={updateRoleMutation.isPending}
                     className={`flex-1 p-3 rounded-lg border transition-colors ${
                       roleChangeDialog.currentRole === "viewer"
                         ? "bg-blue-500/30 border-blue-400/50 text-blue-200"
@@ -602,7 +603,7 @@ export function PermissionManager({
                         currentRole: "editor",
                       })
                     }
-                      disabled={updateRoleMutation.isPending}
+                    disabled={updateRoleMutation.isPending}
                     className="px-4 py-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors font-medium disabled:opacity-50"
                   >
                     Cancel
@@ -611,7 +612,7 @@ export function PermissionManager({
                     onClick={() =>
                       handleUpdateRole(roleChangeDialog.currentRole)
                     }
-                      disabled={updateRoleMutation.isPending}
+                    disabled={updateRoleMutation.isPending}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {updateRoleMutation.isPending && (
@@ -651,7 +652,9 @@ export function PermissionManager({
         onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
         title="Remove Collaborator"
         description={`Are you sure you want to remove ${deleteDialog.email} from this list? They will lose access immediately.`}
-        confirmText={removeCollaboratorMutation.isPending ? "Removing..." : "Remove"}
+        confirmText={
+          removeCollaboratorMutation.isPending ? "Removing..." : "Remove"
+        }
         onConfirm={handleRemoveCollaborator}
         variant="destructive"
       />

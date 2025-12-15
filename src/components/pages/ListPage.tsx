@@ -633,20 +633,23 @@ export default function ListPageClient() {
           {/* First Row: Title/Info on Left, Buttons on Right */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
             {/* Left Side: Title, URL Count, Visibility Badge, Toggle */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-wrap">
+            <div className="flex flex-col gap-2 sm:gap-3">
               {/* Title Skeleton */}
               <Skeleton className="h-6 sm:h-7 md:h-8 w-48 sm:w-64" />
 
-              {/* URL Count Badge Skeleton */}
-              <Skeleton className="h-5 w-16 rounded-full" />
+              {/* Badges and Toggle Row Skeleton */}
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                {/* URL Count Badge Skeleton */}
+                <Skeleton className="h-5 w-16 rounded-full" />
 
-              {/* Visibility Badge Skeleton */}
-              <Skeleton className="h-5 w-20 sm:w-32 rounded-full" />
+                {/* Visibility Badge Skeleton */}
+                <Skeleton className="h-5 w-20 sm:w-32 rounded-full" />
 
-              {/* Private/Public Toggle Skeleton */}
-              <div className="flex flex-col items-center">
-                <Skeleton className="h-6 w-12 rounded-full" />
-                <Skeleton className="h-3 w-12 mt-1" />
+                {/* Private/Public Toggle Skeleton */}
+                <div className="flex items-center gap-1.5">
+                  <Skeleton className="h-6 w-12 rounded-full" />
+                  <Skeleton className="h-3 w-12 hidden sm:block" />
+                </div>
               </div>
             </div>
 
@@ -793,48 +796,50 @@ export default function ListPageClient() {
         {/* First Row: Title/Info on Left, Buttons on Right */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
           {/* Left Side: Title, URL Count, Visibility Badge, Toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="flex flex-col gap-2 sm:gap-3">
             {/* Title */}
             <h1 className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-white break-words">
               {list.title || `List: ${list.slug}`}
             </h1>
 
-            {/* URL Count Badge */}
-            <Badge variant="secondary" className="text-xs sm:text-sm w-fit">
-              {list.urls?.length || 0}{" "}
-              {list.urls?.length === 1 ? "URL" : "URLs"}
-            </Badge>
+            {/* Badges and Toggle Row */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              {/* URL Count Badge */}
+              <Badge variant="secondary" className="text-xs sm:text-sm w-fit">
+                {list.urls?.length || 0}{" "}
+                {list.urls?.length === 1 ? "URL" : "URLs"}
+              </Badge>
 
-            {/* Visibility Badge */}
-            <Badge
-              variant={list.isPublic ? "success" : "secondary"}
-              className="text-xs sm:text-sm flex items-center gap-1 w-fit"
-            >
-              {list.isPublic ? (
-                <>
-                  <Globe className="w-3 h-3" />
-                  <span className="hidden sm:inline">
-                    Public - Anyone can view
-                  </span>
-                  <span className="sm:hidden">Public</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-3 h-3" />
-                  <span className="hidden sm:inline">
-                    Private - Only you & collaborators
-                  </span>
-                  <span className="sm:hidden">Private</span>
-                </>
-              )}
-            </Badge>
+              {/* Visibility Badge */}
+              <Badge
+                variant={list.isPublic ? "success" : "secondary"}
+                className="text-xs sm:text-sm flex items-center gap-1 w-fit"
+              >
+                {list.isPublic ? (
+                  <>
+                    <Globe className="w-3 h-3" />
+                    <span className="hidden sm:inline">
+                      Public - Anyone can view
+                    </span>
+                    <span className="sm:hidden">Public</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3 h-3" />
+                    <span className="hidden sm:inline">
+                      Private - Only you & collaborators
+                    </span>
+                    <span className="sm:hidden">Private</span>
+                  </>
+                )}
+              </Badge>
 
-            {/* Private/Public Toggle - Disabled for viewers */}
-            <div className="flex flex-col items-center">
-              <Switch
-                checked={list.isPublic ?? false}
-                disabled={isToggling || !permissions.canInvite}
-                onChange={async (e) => {
+              {/* Private/Public Toggle - Disabled for viewers */}
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  checked={list.isPublic ?? false}
+                  disabled={isToggling || !permissions.canInvite}
+                  onChange={async (e) => {
                   const newValue = e.target.checked;
                   setIsToggling(true);
                   try {
@@ -914,10 +919,11 @@ export default function ListPageClient() {
                     setIsToggling(false);
                   }
                 }}
-              />
-              <span className="text-[10px] text-white/50 mt-1">
-                {list.isPublic ? "Public" : "Private"}
-              </span>
+                />
+                <span className="text-[10px] text-white/50 hidden sm:inline">
+                  {list.isPublic ? "Public" : "Private"}
+                </span>
+              </div>
             </div>
           </div>
 

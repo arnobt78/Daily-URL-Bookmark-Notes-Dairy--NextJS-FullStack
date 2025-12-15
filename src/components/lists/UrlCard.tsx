@@ -430,21 +430,23 @@ export const UrlCard: React.FC<UrlCardProps> = ({
             <>
               <div className="flex-1 min-w-0">
                 {/* Title with Health Status directly after text */}
-                <div className="flex items-center gap-2 mb-2 flex-wrap min-w-0">
+                <div className="mb-2 min-w-0">
                   <h3
-                    className="font-bold text-base sm:text-lg lg:text-xl text-white group-hover:text-blue-400 transition-colors font-joti inline-block break-words"
+                    className="font-bold text-base sm:text-lg lg:text-xl text-white group-hover:text-blue-400 transition-colors font-joti inline break-words"
                     title={title}
                   >
                     {title}
                   </h3>
-                  {/* Health Status Indicator - directly after title */}
-                  <UrlHealthIndicator
-                    status={url.healthStatus}
-                    httpStatus={url.healthLastStatus}
-                    responseTime={url.healthResponseTime}
-                    checkedAt={url.healthCheckedAt}
-                    showDetails={false}
-                  />
+                  <span className="inline-flex items-center ml-2 align-middle">
+                    {/* Health Status Indicator - directly after title */}
+                    <UrlHealthIndicator
+                      status={url.healthStatus}
+                      httpStatus={url.healthLastStatus}
+                      responseTime={url.healthResponseTime}
+                      checkedAt={url.healthCheckedAt}
+                      showDetails={false}
+                    />
+                  </span>
                 </div>
 
                 {/* Pinned Badge */}

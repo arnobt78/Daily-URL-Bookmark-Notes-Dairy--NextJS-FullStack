@@ -2576,29 +2576,29 @@ export function UrlList() {
   return (
     <div className="space-y-8">
       {/* Tabs for Active/Archived and Add URL Button */}
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-2">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 border-b border-white/10 pb-2">
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 sm:flex-none">
           <Button
             type="button"
             onClick={() => setShowArchived(false)}
-            className={
+            className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 flex-1 sm:flex-none ${
               !showArchived
                 ? "bg-blue-600 text-white"
                 : "bg-white/10 text-white/70 hover:bg-white/20"
-            }
+            }`}
           >
             Active URLs ({list.urls?.length || 0})
           </Button>
           <Button
             type="button"
             onClick={() => setShowArchived(true)}
-            className={
+            className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 flex-1 sm:flex-none ${
               showArchived
                 ? "bg-blue-600 text-white"
                 : "bg-white/10 text-white/70 hover:bg-white/20"
-            }
+            }`}
           >
-            <ArchiveBoxIcon className="h-4 w-4 mr-2" />
+            <ArchiveBoxIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
             Archived ({archivedUrls.length})
           </Button>
         </div>
@@ -2620,11 +2620,11 @@ export function UrlList() {
                 setError(undefined);
               }
             }}
-            className={`bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white flex items-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg ${
+            className={`bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white flex items-center justify-center gap-1.5 sm:gap-2 transition-all duration-200 shadow-md hover:shadow-lg text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 w-full sm:w-auto ${
               !permissions.canEdit ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
-            <CirclePlus className="h-4 w-4" />
+            <CirclePlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Add URL
           </Button>
         )}
@@ -2652,52 +2652,57 @@ export function UrlList() {
       {/* Search, Filter, and Import/Export bar - Same Row, Responsive */}
       {!showArchived && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 mb-4 w-full">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-0">
-            <Input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search URLs, titles, or descriptions... (AI-powered)"
-              className="w-full text-sm sm:text-base lg:text-lg shadow-md font-delicious min-w-[180px] bg-transparent pr-16 sm:pr-20 py-2 sm:py-2.5"
-            />
-            {search.trim() && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                {isSearching ? (
-                  <div className="flex items-center gap-2 text-blue-400">
-                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs font-medium">AI Search...</span>
-        </div>
-                ) : searchCacheIndicator ? (
-                  <span className="text-xs text-green-400 font-medium flex items-center gap-1">
-                    <span className="w-2 h-2 bg-green-400 rounded-full" />
-                    Cached
-                  </span>
-                ) : smartSearchResults ? (
-                  <span className="text-xs text-blue-400 font-medium flex items-center gap-1">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full" />
-                    AI
-                  </span>
-                ) : null}
-              </div>
-            )}
+          {/* Row 1 on phone: Search and Filter */}
+          <div className="flex items-center gap-2 sm:contents">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-0">
+              <Input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search URLs, titles, or descriptions... (AI-powered)"
+                className="w-full text-sm sm:text-base lg:text-lg shadow-md font-delicious min-w-[180px] bg-transparent pr-16 sm:pr-20 py-2 sm:py-2.5"
+              />
+              {search.trim() && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                  {isSearching ? (
+                    <div className="flex items-center gap-2 text-blue-400">
+                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs font-medium">AI Search...</span>
+          </div>
+                  ) : searchCacheIndicator ? (
+                    <span className="text-xs text-green-400 font-medium flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-400 rounded-full" />
+                      Cached
+                    </span>
+                  ) : smartSearchResults ? (
+                    <span className="text-xs text-blue-400 font-medium flex items-center gap-1">
+                      <span className="w-2 h-2 bg-blue-400 rounded-full" />
+                      AI
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            {/* Filter Dropdown */}
+            <UrlFilterBar sortOption={sortOption} setSortOption={setSortOption} />
           </div>
 
-          {/* Filter Dropdown */}
-          <UrlFilterBar sortOption={sortOption} setSortOption={setSortOption} />
-
-          {/* Import/Export Bar */}
-          <UrlBulkImportExport
-            urls={(list.urls as unknown as UrlItem[]) || []}
-            listTitle={list.title}
-            canEdit={permissions.canEdit} // Disable import for viewers
-            onBulkOperationStart={() => {
-              isLocalOperationRef.current = true;
-            }}
-            onBulkOperationEnd={() => {
-              isLocalOperationRef.current = false;
-            }}
-          />
+          {/* Row 2 on phone: Import/Export Bar */}
+          <div className="sm:contents">
+            <UrlBulkImportExport
+              urls={(list.urls as unknown as UrlItem[]) || []}
+              listTitle={list.title}
+              canEdit={permissions.canEdit} // Disable import for viewers
+              onBulkOperationStart={() => {
+                isLocalOperationRef.current = true;
+              }}
+              onBulkOperationEnd={() => {
+                isLocalOperationRef.current = false;
+              }}
+            />
+          </div>
         </div>
       )}
 

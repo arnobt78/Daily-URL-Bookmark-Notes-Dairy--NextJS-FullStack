@@ -1,41 +1,60 @@
 export default function AboutPage() {
   return (
-    <div className="container mx-auto px-2 sm:px-0">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">
-          About The Urlist
+    <div className="min-h-screen w-full">
+      <div className="max-w-7xl mx-auto px-4 sm:px-0">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-6 sm:mb-8">
+          About The Daily Urlist
         </h1>
-        <div className="prose prose-sm sm:prose-lg">
-          <p className="text-base sm:text-lg text-gray-600 mb-4 sm:mb-6">
-            The Urlist is a modern URL bookmarking and sharing platform designed
-            to help you organize and share your favorite web resources
-            efficiently.
+        <div className="prose prose-invert max-w-none">
+          <p className="text-base sm:text-lg text-white/80 mb-4 sm:mb-6">
+            The Daily Urlist is a modern URL bookmarking and sharing platform
+            designed to help you organize and share your favorite web resources
+            efficiently. Built with Next.js and featuring real-time
+            collaboration, AI-powered organization, and beautiful
+            visualizations.
           </p>
-          <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 mt-6 sm:mt-8 mb-2 sm:mb-4">
+          <h2 className="text-xl sm:text-2xl font-semibold text-white mt-6 sm:mt-8 mb-2 sm:mb-4">
             Our Mission
           </h2>
-          <p className="text-base sm:text-lg text-gray-600 mb-4 sm:mb-6">
+          <p className="text-base sm:text-lg text-white/80 mb-4 sm:mb-6">
             We aim to simplify the way people collect, organize, and share web
             resources. Whether you&apos;re a researcher, student, professional,
-            or just someone who loves to curate content, The Urlist provides you
-            with the tools to manage your digital resources effectively.
+            or just someone who loves to curate content, The Daily Urlist
+            provides you with the tools to manage your digital resources
+            effectively.
           </p>
-          <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 mt-6 sm:mt-8 mb-2 sm:mb-4">
+          <h2 className="text-xl sm:text-2xl font-semibold text-white mt-6 sm:mt-8 mb-2 sm:mb-4">
             Features
           </h2>
-          <ul className="list-disc list-inside text-base sm:text-lg text-gray-600 mb-4 sm:mb-6 space-y-2">
-            <li>Create and manage multiple URL lists</li>
-            <li>Share lists with custom URLs</li>
-            <li>Rich previews for all your links</li>
-            <li>Organize with titles and descriptions</li>
-            <li>Secure and private lists with optional public sharing</li>
+          <ul className="list-disc list-inside text-base sm:text-lg text-white/80 mb-4 sm:mb-6 space-y-2">
+            <li>
+              Create and manage multiple URL lists with drag-and-drop reordering
+            </li>
+            <li>
+              Share lists with custom URLs and public/private visibility
+              controls
+            </li>
+            <li>
+              Rich previews with automatic metadata extraction for all your
+              links
+            </li>
+            <li>Organize with titles, descriptions, tags, and categories</li>
+            <li>Real-time collaboration with team members and permissions</li>
+            <li>AI-powered collection suggestions and duplicate detection</li>
+            <li>Business insights and analytics for your URLs and lists</li>
+            <li>Secure authentication and data protection</li>
           </ul>
-          <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 mt-6 sm:mt-8 mb-2 sm:mb-4">
+          <h2 className="text-xl sm:text-2xl font-semibold text-white mt-6 sm:mt-8 mb-2 sm:mb-4">
             Contact
           </h2>
-          <p className="text-base sm:text-lg text-gray-600">
-            Have questions or suggestions? Feel free to reach out to us at
-            arnob_t78@yahoo.com
+          <p className="text-base sm:text-lg text-white/80">
+            Have questions or suggestions? Feel free to reach out to us at{" "}
+            <a
+              href="mailto:arnob_t78@yahoo.com"
+              className="text-blue-400 hover:text-blue-300 underline"
+            >
+              arnob_t78@yahoo.com
+            </a>
           </p>
         </div>
       </div>

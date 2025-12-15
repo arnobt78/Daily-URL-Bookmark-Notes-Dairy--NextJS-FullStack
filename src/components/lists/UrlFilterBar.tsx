@@ -42,7 +42,7 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
           type="button"
           onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
           className={`
-            relative flex items-center justify-center w-12 h-12 rounded-xl
+            relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl
             transition-all duration-200 shadow-md hover:shadow-lg
             ${
               isFilterDropdownOpen || sortOption !== "latest"
@@ -51,9 +51,9 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
             }
           `}
         >
-          <Filter className="h-5 w-5" />
+          <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
           {(sortOption !== "latest" || isFilterDropdownOpen) && (
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-400 rounded-full ring-2 ring-white/20" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-blue-400 rounded-full ring-2 ring-white/20" />
           )}
         </button>
       </HoverTooltip>
@@ -62,7 +62,7 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
       {isFilterDropdownOpen && (
         <div
           className={`
-            absolute right-0 top-full mt-2 w-56
+            absolute right-0 top-full mt-2 w-[280px] max-w-[calc(100vw-1rem)] sm:w-52 md:w-56 sm:max-w-none
             bg-gradient-to-br from-zinc-900/95 to-zinc-800/95
             backdrop-blur-md border border-white/20 rounded-xl shadow-2xl
             py-2 z-50
@@ -70,8 +70,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
           `}
         >
           {/* Sort Options */}
-          <div className="px-2 py-1.5">
-            <div className="px-3 py-1.5 text-xs font-semibold text-white/60 uppercase tracking-wider">
+          <div className="px-1.5 sm:px-2 py-1.5">
+            <div className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white/60 uppercase tracking-wider">
               Sort By
             </div>
             <button
@@ -81,8 +81,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 setIsFilterDropdownOpen(false);
               }}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                text-sm font-medium transition-all duration-150
+                w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg
+                text-xs sm:text-sm font-medium transition-all duration-150
                 ${
                   sortOption === "latest"
                     ? "bg-blue-600/20 text-blue-300"
@@ -90,10 +90,10 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 }
               `}
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>Recently Added</span>
               {sortOption === "latest" && (
-                <span className="ml-auto w-2 h-2 bg-blue-400 rounded-full" />
+                <span className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-400 rounded-full" />
               )}
             </button>
             <button
@@ -103,8 +103,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 setIsFilterDropdownOpen(false);
               }}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                text-sm font-medium transition-all duration-150
+                w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg
+                text-xs sm:text-sm font-medium transition-all duration-150
                 ${
                   sortOption === "oldest"
                     ? "bg-blue-600/20 text-blue-300"
@@ -112,10 +112,10 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 }
               `}
             >
-              <Clock className="h-4 w-4 rotate-180" />
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 rotate-180" />
               <span>Oldest</span>
               {sortOption === "oldest" && (
-                <span className="ml-auto w-2 h-2 bg-blue-400 rounded-full" />
+                <span className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-400 rounded-full" />
               )}
             </button>
             <button
@@ -125,8 +125,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 setIsFilterDropdownOpen(false);
               }}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                text-sm font-medium transition-all duration-150
+                w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg
+                text-xs sm:text-sm font-medium transition-all duration-150
                 ${
                   sortOption === "az"
                     ? "bg-blue-600/20 text-blue-300"
@@ -134,10 +134,10 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 }
               `}
             >
-              <ArrowUpDown className="h-4 w-4" />
+              <ArrowUpDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>A-Z</span>
               {sortOption === "az" && (
-                <span className="ml-auto w-2 h-2 bg-blue-400 rounded-full" />
+                <span className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-400 rounded-full" />
               )}
             </button>
             <button
@@ -147,8 +147,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 setIsFilterDropdownOpen(false);
               }}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                text-sm font-medium transition-all duration-150
+                w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg
+                text-xs sm:text-sm font-medium transition-all duration-150
                 ${
                   sortOption === "za"
                     ? "bg-blue-600/20 text-blue-300"
@@ -156,20 +156,20 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 }
               `}
             >
-              <ArrowUpDown className="h-4 w-4 rotate-180" />
+              <ArrowUpDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 rotate-180" />
               <span>Z-A</span>
               {sortOption === "za" && (
-                <span className="ml-auto w-2 h-2 bg-blue-400 rounded-full" />
+                <span className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-400 rounded-full" />
               )}
             </button>
           </div>
 
           {/* Divider */}
-          <div className="h-px bg-white/10 mx-2 my-2" />
+          <div className="h-px bg-white/10 mx-1.5 sm:mx-2 my-2" />
 
           {/* Filter Options */}
-          <div className="px-2 py-1.5">
-            <div className="px-3 py-1.5 text-xs font-semibold text-white/60 uppercase tracking-wider">
+          <div className="px-1.5 sm:px-2 py-1.5">
+            <div className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white/60 uppercase tracking-wider">
               Filters
             </div>
             <button
@@ -179,8 +179,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 setIsFilterDropdownOpen(false);
               }}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                text-sm font-medium transition-all duration-150
+                w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg
+                text-xs sm:text-sm font-medium transition-all duration-150
                 ${
                   sortOption === "favourite"
                     ? "bg-yellow-500/20 text-yellow-300"
@@ -188,10 +188,10 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 }
               `}
             >
-              <Star className="h-4 w-4" />
+              <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>Favourites</span>
               {sortOption === "favourite" && (
-                <span className="ml-auto w-2 h-2 bg-yellow-400 rounded-full" />
+                <span className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 bg-yellow-400 rounded-full" />
               )}
             </button>
             <button
@@ -201,8 +201,8 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 setIsFilterDropdownOpen(false);
               }}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                text-sm font-medium transition-all duration-150
+                w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg
+                text-xs sm:text-sm font-medium transition-all duration-150
                 ${
                   sortOption === "reminders"
                     ? "bg-orange-500/20 text-orange-300"
@@ -210,10 +210,10 @@ export function UrlFilterBar({ sortOption, setSortOption }: UrlFilterBarProps) {
                 }
               `}
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>Reminders</span>
               {sortOption === "reminders" && (
-                <span className="ml-auto w-2 h-2 bg-orange-400 rounded-full" />
+                <span className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-400 rounded-full" />
               )}
             </button>
           </div>

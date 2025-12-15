@@ -25,20 +25,26 @@ export default function Navbar() {
   });
 
   // Handle navigation with import check
-  const handleNavigation = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  const handleNavigation = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    href: string
+  ) => {
     // Check if import is active or just completed
     if (typeof window !== "undefined") {
       const isImportActive = (window as any).__bulkImportActive === true;
-      const importJustCompleted = (window as any).__bulkImportJustCompleted === true;
-      
+      const importJustCompleted =
+        (window as any).__bulkImportJustCompleted === true;
+
       if (isImportActive || importJustCompleted) {
         e.preventDefault();
         e.stopPropagation();
-        
+
         if (process.env.NODE_ENV === "development") {
-          console.log(`⏸️ [NAVBAR] Navigation blocked - import active: ${isImportActive}, just completed: ${importJustCompleted}`);
+          console.log(
+            `⏸️ [NAVBAR] Navigation blocked - import active: ${isImportActive}, just completed: ${importJustCompleted}`
+          );
         }
-        
+
         // CRITICAL: Force abort any pending requests and clear router cache
         // This ensures RSC requests don't get stuck
         try {
@@ -46,21 +52,23 @@ export default function Navbar() {
           if (abortRegistry) {
             // Force abort all requests
             abortRegistry.forceAbortAllGlobal();
-            
+
             // Ensure interception is stopped
             abortRegistry.stopGlobalInterception();
-            
+
             if (process.env.NODE_ENV === "development") {
-              console.log(`🧹 [NAVBAR] Force cleaned up abort registry before navigation`);
+              console.log(
+                `🧹 [NAVBAR] Force cleaned up abort registry before navigation`
+              );
             }
           }
-          
+
           // Clear ALL Next.js router caches aggressively
           const nextRouter = (window as any).__NEXT_DATA__?.router;
           if (nextRouter?.prefetchCache) {
             nextRouter.prefetchCache.clear();
           }
-          
+
           const routerInstance = (window as any).__nextRouter;
           if (routerInstance) {
             if (routerInstance.isPending !== undefined) {
@@ -70,12 +78,12 @@ export default function Navbar() {
               routerInstance.cache.clear?.();
             }
           }
-          
+
           const nextFetchCache = (window as any).__nextFetchCache;
           if (nextFetchCache) {
             nextFetchCache.clear();
           }
-          
+
           if (process.env.NODE_ENV === "development") {
             console.log(`🧹 [NAVBAR] Cleared all Next.js router caches`);
           }
@@ -85,7 +93,7 @@ export default function Navbar() {
             console.warn(`⚠️ [NAVBAR] Error during cleanup:`, e);
           }
         }
-        
+
         // CRITICAL: Always use window.location for forced navigation
         // This bypasses Next.js router and prevents stuck RSC requests
         // Use a small delay to ensure cleanup completes
@@ -93,15 +101,15 @@ export default function Navbar() {
           // Clear flags before navigation
           (window as any).__bulkImportActive = false;
           (window as any).__bulkImportJustCompleted = false;
-          
+
           // Force full page reload to ensure clean state
           window.location.href = href;
         }, 100);
-        
+
         return;
       }
     }
-    
+
     // Normal navigation - let Next.js handle it
   };
 
@@ -119,7 +127,7 @@ export default function Navbar() {
         // CRITICAL: Clear ALL React Query cache before logout
         // This ensures no user-specific data remains cached for the next user
         queryClient.clear(); // Remove all queries from cache
-        
+
         // Clear localStorage cache as well (if used)
         if (typeof window !== "undefined") {
           const keys = Object.keys(localStorage);
@@ -129,7 +137,7 @@ export default function Navbar() {
             }
           });
         }
-        
+
         // Clear browser session/cookies and redirect to home (which will show Auth page)
         // Use window.location.href to force a full page reload and clear all state
         window.location.href = "/";
@@ -143,7 +151,7 @@ export default function Navbar() {
 
   return (
     <nav className="bg-transparent backdrop-blur-md sticky top-0 z-50">
-      <div className="mx-auto max-w-7xl px-2 sm:px-4 lg:px-6 py-2 sm:py-3">
+      <div className="mx-auto max-w-7xl px-2 sm:px-0 py-2 sm:py-3">
         <div className="flex items-center justify-between">
           {/* Logo/Brand - Responsive sizing */}
           <Link
@@ -204,7 +212,9 @@ export default function Navbar() {
               <IconButton
                 icon={
                   <ArrowRightStartOnRectangleIcon
-                    className={`h-4 w-4 sm:h-5 sm:w-5 ${isLoggingOut ? "animate-pulse" : ""}`}
+                    className={`h-4 w-4 sm:h-5 sm:w-5 ${
+                      isLoggingOut ? "animate-pulse" : ""
+                    }`}
                   />
                 }
                 onClick={handleLogout}

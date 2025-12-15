@@ -99,15 +99,15 @@ export function OverviewCards({ data, isLoading }: OverviewCardsProps) {
             className="hover:border-blue-400/30 transition-all"
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-white/70">
+              <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
                 {card.title}
               </CardTitle>
-              <div className={`p-2 rounded-lg ${card.bgColor}`}>
-                <Icon className={`h-4 w-4 ${card.color}`} />
+              <div className={`p-1.5 sm:p-2 rounded-lg ${card.bgColor}`}>
+                <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${card.color}`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white mb-1">
+              <div className="text-xl sm:text-2xl font-bold text-white mb-1">
                 {card.value.toLocaleString()}
               </div>
               {card.change !== null && card.change > 0 && (

@@ -116,13 +116,13 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               Total Users
             </CardTitle>
-            <Users className="h-4 w-4 text-blue-400" />
+            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {data.totalUsers.toLocaleString()}
             </div>
             <p className="text-xs text-white/60 mt-1">
@@ -134,13 +134,13 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               Live Users Now
             </CardTitle>
-            <Activity className="h-4 w-4 text-green-400" />
+            <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {data.liveUsersNow}
             </div>
             <p className="text-xs text-white/60 mt-1">
@@ -151,13 +151,13 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               Total Lists
             </CardTitle>
-            <List className="h-4 w-4 text-purple-400" />
+            <List className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-purple-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {data.totalLists.toLocaleString()}
             </div>
             <p className="text-xs text-white/60 mt-1">
@@ -169,13 +169,13 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               Total URLs
             </CardTitle>
-            <Link2 className="h-4 w-4 text-green-400" />
+            <Link2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {data.totalUrls.toLocaleString()}
             </div>
             <p className="text-xs text-white/60 mt-1">
@@ -190,13 +190,13 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               Avg URLs per List
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-400" />
+            <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {data.avgUrlsPerList}
             </div>
           </CardContent>
@@ -204,16 +204,16 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               List Distribution
             </CardTitle>
-            <div className="flex gap-2">
-              <Globe className="h-4 w-4 text-green-400" />
-              <Lock className="h-4 w-4 text-yellow-400" />
+            <div className="flex gap-1.5 sm:gap-2">
+              <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-400" />
+              <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-400" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <Badge variant="success" className="text-xs">
                   <Globe className="h-3 w-3 mr-1" />
@@ -232,13 +232,13 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/70">
+            <CardTitle className="text-xs sm:text-sm font-medium text-white/70">
               Lists with Collaborators
             </CardTitle>
-            <Users className="h-4 w-4 text-purple-400" />
+            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-purple-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {data.listsWithCollaborators}
             </div>
           </CardContent>
@@ -248,9 +248,11 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
       {/* User Growth Chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-blue-400" />
-            User Growth (Last 30 Days)
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+            <UserPlus className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
+            <span className="text-xs sm:text-base">
+              User Growth (Last 30 Days)
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -264,22 +266,25 @@ export function GlobalStats({ data, isLoading }: GlobalStatsProps) {
                 <XAxis
                   dataKey="date"
                   stroke="#ffffff60"
-                  style={{ fontSize: "12px" }}
+                  style={{ fontSize: "10px" }}
+                  className="text-[10px] sm:text-xs"
                   angle={-45}
                   textAnchor="end"
                   height={60}
+                  interval="preserveStartEnd"
                 />
-                <YAxis stroke="#ffffff60" style={{ fontSize: "12px" }} />
+                <YAxis stroke="#ffffff60" style={{ fontSize: "10px" }} className="text-[10px] sm:text-xs" />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend
-                  wrapperStyle={{ color: "#ffffff60", fontSize: "12px" }}
+                  wrapperStyle={{ color: "#ffffff60", fontSize: "10px" }}
+                  className="text-[10px] sm:text-xs"
                 />
                 <Line
                   type="monotone"
                   dataKey="users"
                   stroke="#3b82f6"
                   strokeWidth={2}
-                  dot={{ fill: "#3b82f6", r: 4 }}
+                  dot={{ fill: "#3b82f6", r: 3 }}
                   name="New Users"
                 />
               </LineChart>

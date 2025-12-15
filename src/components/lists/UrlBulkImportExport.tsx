@@ -2306,9 +2306,9 @@ export function UrlBulkImportExport({
   };
 
   return (
-    <div className="flex flex-row items-center gap-2 flex-wrap flex-shrink-0">
+    <div className="flex flex-row items-center gap-2 flex-wrap flex-shrink-0 w-full sm:w-auto justify-end sm:justify-start">
       {/* Export with dropdown menu */}
-      <div className="relative" ref={exportMenuRef}>
+      <div className="relative flex-none" ref={exportMenuRef}>
         <HoverTooltip
           message="Export URLs in various formats"
           position="top"
@@ -2319,9 +2319,9 @@ export function UrlBulkImportExport({
             onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={isExporting !== null || urls.length === 0}
             className={`
-              relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl
+              relative flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl
               transition-all duration-200 shadow-md hover:shadow-lg
-              text-sm font-medium whitespace-nowrap
+              text-xs sm:text-sm font-medium whitespace-nowrap
               ${
                 isExporting !== null || urls.length === 0
                   ? "bg-white/5 text-white/40 cursor-not-allowed"
@@ -2331,13 +2331,13 @@ export function UrlBulkImportExport({
           >
             {isExporting ? (
               <>
-                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                <span className="hidden sm:inline">Exporting...</span>
+                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                <span>Exporting...</span>
               </>
             ) : (
               <>
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Export</span>
+                <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span>Export URLs</span>
                 <ChevronDown className="h-3 w-3" />
               </>
             )}
@@ -2346,7 +2346,7 @@ export function UrlBulkImportExport({
 
         {/* Export dropdown menu */}
         {showExportMenu && !isExporting && (
-          <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+          <div className="absolute top-full left-0 sm:left-auto sm:right-0 mt-2 w-[280px] max-w-[calc(100vw-1rem)] sm:w-56 sm:max-w-none bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
             <div className="py-1">
               <button
                 type="button"
@@ -2396,7 +2396,7 @@ export function UrlBulkImportExport({
       </div>
 
       {/* Import with dropdown menu */}
-      <div className="relative" ref={importMenuRef}>
+      <div className="relative flex-none" ref={importMenuRef}>
         <HoverTooltip
           message="Import URLs from various formats"
           position="top"
@@ -2407,9 +2407,9 @@ export function UrlBulkImportExport({
             onClick={() => setShowImportMenu(!showImportMenu)}
             disabled={isImporting || !canEdit}
             className={`
-              relative flex items-center justify-center gap-2 px-4 py-2 rounded-xl
+              relative flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl
               transition-all duration-200 shadow-md hover:shadow-lg
-              text-sm font-medium whitespace-nowrap
+              text-xs sm:text-sm font-medium whitespace-nowrap
               ${
                 isImporting || !canEdit
                   ? "bg-white/5 text-white/40 cursor-not-allowed"
@@ -2419,13 +2419,13 @@ export function UrlBulkImportExport({
           >
             {isImporting ? (
               <>
-                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                <span className="hidden sm:inline">Importing...</span>
+                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span>Importing...</span>
               </>
             ) : (
               <>
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Import</span>
+                <Upload className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span>Import URLs</span>
                 <ChevronDown className="h-3 w-3" />
               </>
             )}
@@ -2434,7 +2434,7 @@ export function UrlBulkImportExport({
 
         {/* Import dropdown menu */}
         {showImportMenu && !isImporting && canEdit && (
-          <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+          <div className="absolute top-full right-0 mt-2 w-[280px] max-w-[calc(100vw-1rem)] sm:w-56 sm:max-w-none bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
             <div className="py-1">
               <label className="block px-4 py-2 text-sm text-white/90 hover:bg-slate-700 cursor-pointer">
                 <span className="flex items-center gap-2">

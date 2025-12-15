@@ -122,7 +122,7 @@ export function HoverTooltip({
       }}
       role="tooltip"
     >
-      <div className="bg-gray-900 text-white text-sm px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap font-delicious animate-in fade-in-0 zoom-in-95 duration-200">
+      <div className="bg-gray-900 text-white text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-lg shadow-lg whitespace-normal sm:whitespace-nowrap max-w-[calc(100vw-2rem)] sm:max-w-none font-delicious animate-in fade-in-0 zoom-in-95 duration-200">
         {message}
       </div>
     </div>
@@ -131,7 +131,7 @@ export function HoverTooltip({
       className={`absolute z-50 ${positionClasses[position]}`}
       role="tooltip"
     >
-      <div className="bg-gray-900 text-white text-sm px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap font-delicious animate-in fade-in-0 zoom-in-95 duration-200 pointer-events-none">
+      <div className="bg-gray-900 text-white text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-lg shadow-lg whitespace-normal sm:whitespace-nowrap max-w-[calc(100vw-2rem)] sm:max-w-none font-delicious animate-in fade-in-0 zoom-in-95 duration-200 pointer-events-none">
         {message}
       </div>
     </div>

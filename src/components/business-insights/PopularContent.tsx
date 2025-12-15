@@ -68,36 +68,36 @@ export function PopularContent({
       {/* Popular URLs */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-yellow-400" />
-            Popular URLs
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+            <Star className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
+            <span>Popular URLs</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {popularUrls.length === 0 ? (
-              <p className="text-white/60 text-sm text-center py-8">
+              <p className="text-white/60 text-xs sm:text-sm text-center py-6 sm:py-8">
                 No URLs yet
               </p>
             ) : (
               popularUrls.map((url) => (
                 <div
                   key={url.id}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-white/10 hover:border-blue-400/30 transition-all"
+                  className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg bg-white/5 border border-white/10 hover:border-blue-400/30 transition-all"
                 >
                   {url.isFavorite && (
-                    <Star className="h-4 w-4 text-yellow-400 flex-shrink-0 mt-1 fill-yellow-400" />
+                    <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-400 flex-shrink-0 mt-0.5 sm:mt-1 fill-yellow-400" />
                   )}
                   <div className="flex-1 min-w-0">
                     <a
                       href={url.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white hover:text-blue-400 transition-colors text-sm font-medium truncate block"
+                      className="text-white hover:text-blue-400 transition-colors text-xs sm:text-sm font-medium truncate block"
                     >
                       {url.title || url.url}
                     </a>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
                       <Link
                         href={`/list/${url.listSlug}`}
                         className="text-white/60 hover:text-white/80 text-xs truncate"
@@ -112,7 +112,7 @@ export function PopularContent({
                       )}
                     </div>
                   </div>
-                  <ExternalLink className="h-4 w-4 text-white/40 flex-shrink-0 mt-1" />
+                  <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white/40 flex-shrink-0 mt-0.5 sm:mt-1" />
                 </div>
               ))
             )}
@@ -123,15 +123,15 @@ export function PopularContent({
       {/* Active Lists */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-blue-400" />
-            Most Active Lists
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
+            <span>Most Active Lists</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {activeLists.length === 0 ? (
-              <p className="text-white/60 text-sm text-center py-8">
+              <p className="text-white/60 text-xs sm:text-sm text-center py-6 sm:py-8">
                 No lists yet
               </p>
             ) : (
@@ -139,11 +139,11 @@ export function PopularContent({
                 <Link
                   key={list.id}
                   href={`/list/${list.slug}`}
-                  className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 hover:border-blue-400/30 transition-all group"
+                  className="flex items-center justify-between p-2 sm:p-3 rounded-lg bg-white/5 border border-white/10 hover:border-blue-400/30 transition-all group"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="text-white group-hover:text-blue-400 transition-colors text-sm font-medium truncate">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
+                      <h4 className="text-white group-hover:text-blue-400 transition-colors text-xs sm:text-sm font-medium truncate">
                         {list.title}
                       </h4>
                       {list.isPublic ? (
@@ -152,7 +152,7 @@ export function PopularContent({
                         <Lock className="h-3 w-3 text-yellow-400 flex-shrink-0" />
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-white/60">
+                    <div className="flex items-center gap-2 sm:gap-3 text-xs text-white/60">
                       <span>{list.urlCount} URLs</span>
                       {list.collaborators > 0 && (
                         <>
@@ -165,7 +165,7 @@ export function PopularContent({
                       )}
                     </div>
                   </div>
-                  <Badge variant="secondary" className="ml-2">
+                  <Badge variant="secondary" className="ml-2 text-xs">
                     {list.urlCount}
                   </Badge>
                 </Link>
