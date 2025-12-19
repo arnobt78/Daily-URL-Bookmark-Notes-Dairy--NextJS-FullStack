@@ -218,9 +218,13 @@ export async function getCurrentSession(): Promise<Session | null> {
       where: { token },
       data: { lastActivityAt: new Date() },
     })
-    .catch((err) => {
+    .catch((err: any) => {
       // Silently fail - not critical if update fails
-      console.error("Failed to update session lastActivityAt:", err);
+      // P2025 = Record not found (session was deleted, e.g., during logout)
+      // This is expected and can be safely ignored
+      if (err.code !== "P2025") {
+        console.error("Failed to update session lastActivityAt:", err);
+      }
     });
 
   // Cache the result

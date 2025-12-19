@@ -183,13 +183,19 @@ export default function Auth() {
     setLoading(true);
     setMessage("");
 
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
     try {
       const response = await fetch("/api/auth/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       const data = await response.json();
 
       if (!response.ok) {
@@ -250,8 +256,17 @@ export default function Auth() {
           }, 1200); // Give time for cookie to be set and session to be ready
         }
       }
-    } catch {
-      const errorMsg = "An unexpected error occurred";
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      let errorMsg = "An unexpected error occurred";
+      
+      if (error.name === "AbortError") {
+        errorMsg = "Request timed out. Please try again.";
+      } else if (error instanceof Error) {
+        errorMsg = error.message || errorMsg;
+      }
+      
+      console.error("Sign in error:", error);
       setMessage(errorMsg);
       toast({
         title: "Error",
